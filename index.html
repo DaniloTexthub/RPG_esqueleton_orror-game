@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPG Skeleton Dungeon — Horror Turn-Based</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="ui-overlay">
+    <div class="stat-bar">
+      <span class="stat-label">HP:</span>
+      <span class="stat-value" id="hp-display">100/100</span>
+    </div>
+    <div class="stat-bar">
+      <span class="stat-label">AP:</span>
+      <span class="stat-value" id="ap-display">5/5</span>
+    </div>
+    <div class="stat-bar">
+      <span class="stat-label">ANDAR:</span>
+      <span class="stat-value" id="floor-display">1</span>
+    </div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+
+  <div id="debug-info"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
