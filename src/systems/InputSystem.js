@@ -4,6 +4,8 @@
 import { System } from '../core/System.js';
 import { KEYS, DIRS } from '../utils/constants.js';
 
+export const INTERACT_KEY = 'KeyE';
+
 export class InputSystem extends System {
   constructor() {
     super(100); // Prioridade alta - roda primeiro
@@ -47,6 +49,7 @@ export class InputSystem extends System {
 
     // Processa justPressed ANTES que o Engine limpe
     this.lastDirection = null;
+    this.lastInteract = false;
 
     for (const [dirName, dir] of Object.entries(DIRS)) {
       for (const key of dir.key) {
@@ -59,9 +62,24 @@ export class InputSystem extends System {
       if (this.lastDirection) break;
     }
 
+    // Detecta tecla E (interagir)
+    if (this.engine.input.justPressed.has(INTERACT_KEY)) {
+      this.lastInteract = true;
+      console.log(`   ✅ Detectou: INTERAGIR (E)`);
+    }
+
     if (this.lastDirection) {
       console.log(`🎮 InputSystem.update: direção consumida = ${this.lastDirection.name}`);
     }
+  }
+
+  // Verifica se tecla de interação foi pressionada
+  getInteractPressed() {
+    return this.lastInteract;
+  }
+
+  consumeInteract() {
+    this.lastInteract = false;
   }
 
   onKeyUp(e) {
@@ -93,10 +111,5 @@ export class InputSystem extends System {
   // Verifica se tecla está segurada
   isHeld(keyCode) {
     return this.engine?.input.keys.has(keyCode) || false;
-  }
-
-  update(dt, entities, game) {
-    // InputSystem não processa entities - apenas atualiza estado interno
-    // Outros systems usam getDirectionPressed(), wasPressed(), isHeld()
   }
 }

@@ -31,4 +31,9 @@ export class Position extends Component {
   equals(other) {
     return this.x === other.x && this.y === other.y;
   }
+
+  // Cria cópia independente
+  clone() {
+    return new Position(this.x, this.y);
+  }
 }

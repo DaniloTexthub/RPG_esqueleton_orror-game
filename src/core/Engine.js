@@ -141,11 +141,30 @@ export class Engine {
 
     this.renderer.clear();
 
+    // Atualiza fade (precisa do contexto do renderer)
+    const context = this.renderer.context;
+    if (context && typeof context.updateFade === 'function') {
+      context.updateFade();
+    }
+    // Atualiza flash
+    if (context && typeof context.updateFlash === 'function') {
+      context.updateFlash();
+    }
+
     // Usa RenderSystem global se disponível, senão fallback para scene.render()
     if (this.renderSystem && typeof this.renderSystem.render === 'function') {
       this.renderSystem.render(this.renderer, this.camera, alpha);
     } else if (this.currentScene) {
       this.currentScene.render(this.renderer, this.camera, alpha);
+    }
+
+    // Desenha overlay de fade por cima de tudo
+    if (context && typeof context.drawFade === 'function') {
+      context.drawFade(this.ctx, this.canvas.width, this.canvas.height);
+    }
+    // Desenha overlay de flash por cima de tudo (último)
+    if (context && typeof context.drawFlash === 'function') {
+      context.drawFlash(this.ctx, this.canvas.width, this.canvas.height);
     }
 
     this.renderer.flush?.();

@@ -9,6 +9,7 @@ import { Velocity } from '../components/Velocity.js';
 import { Sprite } from '../components/Sprite.js';
 import { Collider } from '../components/Collider.js';
 import { PlayerTag } from '../components/PlayerTag.js';
+import { Combatant } from '../components/Combatant.js';
 import { createPlayer } from '../entities/createPlayer.js';
 import { createEnemy } from '../entities/createEnemy.js';
 import { InputSystem } from '../systems/InputSystem.js';
@@ -23,6 +24,8 @@ export class DungeonScene extends Scene {
     this.gridMap = null;
     this.floor = 1;
     this.player = null;
+    this.characterId = 'skeleton_warrior';
+    this.isNewGame = true;
   }
 
   init(game) {
@@ -37,7 +40,7 @@ export class DungeonScene extends Scene {
     this.addSystem(new MovementSystem());
     // RenderSystem é global no engine, não precisa aqui
 
-    // Spawn player
+    // Spawn player (será sobrescrito no onEnter se vier do menu)
     this.spawnPlayer();
 
     // Spawn inimigos
@@ -50,11 +53,101 @@ export class DungeonScene extends Scene {
   }
 
   onEnter(data = {}) {
+    // Reanexa listeners do InputSystem (necessário ao voltar de outras cenas)
+    const inputSystem = this.systems.find(s => s.constructor.name === 'InputSystem');
+    if (inputSystem) inputSystem.onAdd(this.engine);
+
+    // Veio do MENU — novo jogo ou continue
+    if (data.characterId) {
+      this.characterId = data.characterId;
+      this.floor = data.floor || 1;
+      this.isNewGame = data.isNewGame !== false;
+
+      // Fade in ao entrar na masmorra (novo jogo ou continue)
+      this.engine.renderer.context.fadeIn(400);
+
+      // Regenera player com a classe escolhida
+      this.replacePlayerWithClass(this.characterId);
+
+      // Se novo jogo, regenera andar do zero
+      if (this.isNewGame) {
+        this.floor = 1;
+        this.regenerateFloor();
+      }
+      return;
+    }
+
+    // Veio de combate — restaura estado do player, NÃO regenera andar
+    if (data.victory !== undefined) {
+      const isFlee = data.combatData?.fled === true;
+      const resultText = data.victory ? 'Vitória' : (isFlee ? 'Fuga' : 'Derrota');
+      console.log(`📍 Voltando do combate: ${resultText}`);
+
+      // Fade in para tirar a tela preta do fadeOut do combate
+      this.engine.renderer.context.fadeIn(400);
+
+      // Reanexa listeners do InputSystem (foram removidos no onExit ao ir pro combate)
+      const inputSystem = this.systems.find(s => s.constructor.name === 'InputSystem');
+      if (inputSystem) inputSystem.onAdd(this.engine);
+
+      this.player = this.getFirstByTag('player');
+      if (this.player) {
+        const combatant = this.player.get('Combatant');
+        if (combatant) {
+          // HP/AP já sincronizados via CombatScene, mas garante UI
+          this.updatePlayerUI();
+        }
+        // Reposiciona player se tiver posição de retorno
+        if (data.returnData?.playerPos) {
+          const pos = this.player.get('Position');
+          if (pos) pos.set(data.returnData.playerPos.x, data.returnData.playerPos.y);
+        }
+      }
+      // Atualiza floor display
+      this.updateFloorUI();
+
+      // Se morreu no combate (derrota, não fuga), game over
+      if (!data.victory && !isFlee) {
+        this.gameOver();
+      }
+      return;
+    }
+
     // Se veio de mudança de andar, reposiciona player
     if (data.floor) {
       this.floor = data.floor;
       this.regenerateFloor();
+      // Fade in ao mudar de andar
+      this.engine.renderer.context.fadeIn(400);
     }
+  }
+
+  // Substitui player existente por novo com classe escolhida
+  replacePlayerWithClass(characterId) {
+    const oldPlayer = this.getFirstByTag('player');
+    const spawn = this.gridMap.playerSpawn;
+
+    // Remove player antigo se existe
+    if (oldPlayer) {
+      this.removeEntity(oldPlayer);
+    }
+
+    // Cria novo player com a classe
+    this.player = createPlayer(spawn.x, spawn.y, characterId);
+    this.addEntity(this.player);
+    this.player.addTag('player');
+
+    // Camera segue player
+    this.engine.renderer.context.follow(this.player, this.engine.canvas.width, this.engine.canvas.height, 32);
+  }
+
+  gameOver() {
+    console.log('💀 GAME OVER');
+    this.engine.gameState = 'game_over';
+    // Volta para menu em vez de alert
+    setTimeout(() => {
+      this.engine.changeScene('menu');
+    }, 1500);
   }
 
   onExit() {
@@ -67,7 +160,7 @@ export class DungeonScene extends Scene {
   // Spawn do player na posição definida no mapa
   spawnPlayer() {
     const spawn = this.gridMap.playerSpawn;
-    this.player = createPlayer(spawn.x, spawn.y);
+    this.player = createPlayer(spawn.x, spawn.y, this.characterId);
     this.addEntity(this.player);
     this.player.addTag('player');
 

@@ -75,18 +75,11 @@ export function createEnemy(x, y, typeId = 1) {
 
   entity.add(new Collider({
     solid: true,
-    trigger: true, // Trigger para iniciar combate ao encostar
+    trigger: false, // Combate agora tratado no MovementSystem
     layer: 'enemy',
     collidesWith: ['player'],
     width: 1,
-    height: 1,
-    onEnter: (player, enemy) => {
-      // Inicia combate - emit event
-      const engine = enemy.engine || (player.engine?.engine);
-      if (engine) {
-        engine.eventBus.emit('combatStart', { player, enemy });
-      }
-    }
+    height: 1
   }));
 
   // Dados do inimigo (armazenados no collider para simplicidade agora)

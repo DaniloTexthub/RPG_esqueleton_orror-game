@@ -128,40 +128,9 @@ body {
   box-shadow: 0 0 15px #8b0000;
 }
 
-/* Combat UI (future) */
-#combat-ui {
-  position: fixed;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  z-index: 100;
-  pointer-events: auto;
-}
-
-.combat-btn {
-  padding: 8px 16px;
-  font-family: 'Georgia', serif;
-  font-size: 13px;
-  background: #1a1a1a;
-  color: #e0e0e0;
-  border: 2px solid #8b0000;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s;
-  min-width: 100px;
-}
-
-.combat-btn:hover {
-  background: #8b0000;
-  color: #fff;
-}
-
-.combat-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+/* Combat UI — Estilos movidos para CombatUI.js (inline) para evitar conflitos
+   O novo CombatUI usa container full-screen com posicionamento absoluto interno */
+/* #combat-ui { ... } — REMOVIDO: conflita com novo layout Pokémon-style */
 
 /* Log/Message Area */
 #message-log {

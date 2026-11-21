@@ -7,11 +7,11 @@
 
 ## 🎯 Visão Geral
 
-Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), combate por turnos ao encostar em inimigos.
+Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), combate por turnos ao encostar em inimigos. 5 classes jogáveis com stats/moves/passivas exclusivas, menu com seleção de personagem, achievements e customização (bloqueada).
 
 ---
 
-## 📅 Histórico de Desenvolvimento — 2026-11-19
+## 📅 Histórico de Desenvolvimento
 
 ### Sessão Inicial: Estrutura & AGENT.md
 - **Definição de stack**: HTML/CSS/JS vanilla + MySQL opcional
@@ -31,43 +31,29 @@ Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), c
 
 ---
 
-### Implementação: Estrutura Base (Commit 1)
+### Fase 1 — Combate por Turnos (CONCLUÍDA)
 
-```
-src/
-├── main.js                    # Entry point
-├── core/
-│   ├── Engine.js              # Game loop, fixed timestep, scene mgmt
-│   ├── Entity.js              # ECS Entity (id, components Map, tags)
-│   ├── Component.js           # Base Component
-│   ├── System.js              # Base System (priority, requiredComponents)
-│   ├── EventBus.js            # Pub/Sub desacoplado
-│   └── Scene.js               # Container entities + systems
-├── systems/
-│   ├── InputSystem.js         # Teclado → engine.input.justPressed
-│   ├── MovementSystem.js      # WASD + grid collision + lerp
-│   └── RenderSystem.js        # Draw map + entities (zIndex sort)
-├── components/
-│   ├── Position.js            # Grid coords (x, y)
-│   ├── Velocity.js            # Lerp target + progress
-│   ├── Sprite.js              # Color/image/spritesheet + animação
-│   ├── Collider.js            # Solid/trigger + AABB
-│   └── PlayerTag.js           # Stats (HP, AP, atk, def, inventory)
-├── map/
-│   ├── GridMap.js             # Tiles Uint8Array + features + proc gen
-│   └── TileType.js            # Definições walkable/interactable
-├── renderer/
-│   ├── CanvasRenderer.js      # Canvas 2D impl (abstraído p/ WebGL)
-│   └── RenderContext.js       # Camera, alpha, debug flags
-├── scenes/
-│   └── DungeonScene.js        # Mapa proc, spawn player/enemies, floor transition
-├── entities/
-│   ├── createPlayer.js        # Factory: esqueleto verde neon
-│   └── createEnemy.js         # Factory: zumbi, esqueleto, fantasma, morcego
-└── utils/
-    ├── constants.js           # TILE_SIZE, KEYS, DIRS, COLORS, Z_INDEX
-    └── math.js                # lerp, clamp, manhattan, grid↔screen
-```
+**Arquivos criados/modificados:**
+- `src/components/Combatant.js` — Stats unificados (hp, atk, def, spd, AP, XP, status effects, factories)
+- `src/systems/CombatSystem.js` — Turnos, iniciativa por speed, ações player, IA inimigo, eventos
+- `src/ui/CombatUI.js` — Pokémon-style: painéis inimigo/player, caixa msg typing, menu 4 ações, submenu golpes, números dano, shake, barras animadas, animação vitória/derrota/fuga, XP animado
+- `src/scenes/CombatScene.js` — Gerencia fluxo, migração PlayerTag↔Combatant, fade transitions, animação entrada combate (flash+shake)
+- `src/renderer/RenderContext.js` — `fadeIn`, `fadeOut`, `updateFade`, `drawFade`, `flash`, `updateFlash`, `drawFlash`
+- `src/core/Engine.js` — Loop de render chama updateFade/drawFade/updateFlash/drawFlash
+- `src/systems/MovementSystem.js` — Trigger combate em colisão, interação tecla E (portas), escadas
+- `src/systems/InputSystem.js` — INTERACT_KEY (E), getInteractPressed/consumeInteract
+- `src/scenes/DungeonScene.js` — Handle retorno combate, onEnter com characterId/floor/isNewGame, replacePlayerWithClass, reanexa InputSystem
+- `src/main.js` — Registra CombatScene/MenuScene, handlers combatStart/menuStartGame
+- `src/data/characters.js` — 5 classes jogáveis com stats/moves/passivas exclusivas + unlock requirements
+- `src/scenes/MenuScene.js` — Menu principal com seleção de personagem, achievements, customização (bloqueada)
+- `src/entities/createPlayer.js` — Aceita characterId, usa stats/cores da classe
+
+---
+
+### Interações Dungeon (CONCLUÍDA)
+- **Inimigo morto removido** ao vencer combate (`active=false` + event `enemyDefeated`)
+- **Escadas funcionando** — pisar em `>` desce, `<` sobe andar
+- **Porta interativa com E** — abre/fecha porta adjacente na direção que o player está virado
 
 ---
 
@@ -76,40 +62,16 @@ src/
 | # | Bug | Causa | Fix |
 |---|-----|-------|-----|
 | 1 | **Tela preta** | Systems não adicionados à Scene | `DungeonScene.init()` cria `InputSystem` + `MovementSystem` via `addSystem()` |
-| 2 | **RenderSystem não desenha** | `onAdd()` nunca chamado (criado global, não na scene) | `renderSystem.onAdd(engine)` manual no `main.js` |
-| 3 | **MovementSystem não roda** | `Scene.update()` filtra por `requiredComponents` e pula systems sem match | Adicionado `else if (requiredComponents.length === 0)` para InputSystem |
-| 4 | **Input consumido antes do MovementSystem** | `Engine.fixedUpdate()` limpava `justPressed` **antes** de `scene.update()` | Movido `clear()` para **depois** do `scene.update()`; InputSystem guarda `lastDirection` no seu `update()` |
-| 5 | **Inimigos "tremendo"** | `MovementSystem.update()` processava lerp de TODAS entities com Velocity | Guard `if (!vel.moving) continue` — só processa quem está movendo |
-
----
-
-### Estado Atual (Final da Sessão)
-
-#### ✅ Funcionando
-- [x] Vite dev server + HMR
-- [x] Engine: fixed timestep (60Hz) + interpolação render
-- [x] Scene system com priority-based systems
-- [x] ECS leve: Entity + Component + System
-- [x] InputSystem: captura WASD/Setas → `lastDirection`
-- [x] GridMap procedural: salas + corredores + portas + escadas
-- [x] RenderSystem: mapa neon + entities ordenadas por zIndex
-- [x] Camera follow + clamp
-- [x] UI: HP/AP/Floor overlay
-- [x] Debug: F1 (FPS), F2 (grid), F3 (colliders), R (regen floor)
-
-#### ⚠️ Pendente (Bug Final)
-- **Movimento não executa**: `InputSystem.update()` loga direção, mas `MovementSystem.update()` não recebe/processa
-- **Suspeita**: ordem de prioridade ou `getSystem()` não encontra InputSystem no momento certo
-- **Logs mostram**: Scene roda, InputSystem.update chamado, mas MovementSystem não loga `tryMove`
-
-#### 🎨 Visual (Debug Neon)
-- **Background**: `#001100` (verde escuro)
-- **Floor**: `#003300` + grid lines `#00ff00`
-- **Walls**: `#330000` + borda vermelha
-- **Player**: Quadrado **verde neon `#00ff00`** brilhante + olhos brancos
-- **Enemies**: Quadrado **vermelho neon `#ff0044`** + X branco
-- **Porta**: Amarelo/magenta pulsante com letra
-- **Escadas**: Triângulos coloridos `>` `<`
+| 2 | **RenderSystem não desenha** | `onAdd()` nunca chamado | `renderSystem.onAdd(engine)` manual no `main.js` |
+| 3 | **MovementSystem não roda** | `Scene.update()` filtra por `requiredComponents` | Adicionado `else if (requiredComponents.length === 0)` para InputSystem |
+| 4 | **Input consumido antes do MovementSystem** | `Engine.fixedUpdate()` limpava `justPressed` antes de `scene.update()` | Movido `clear()` para **depois** do `scene.update()` |
+| 5 | **Inimigos "tremendo"** | `MovementSystem.update()` processava lerp de TODAS entities | Guard `if (!vel.moving) continue` |
+| 6 | **Movimento não funcionava** | `InputSystem` tinha `update()` duplicado (2º vazio sobrescrevia o real) | Removido `update()` duplicado |
+| 7 | **Collider ReferenceError** | `checkAABB` referenciava `other` não no parâmetro | Adicionado parâmetro `other` + atualizado call site |
+| 8 | **FadeIn not a function** | `RenderContext` não tinha fade methods | Implementado `fadeIn`/`fadeOut`/`updateFade`/`drawFade` + integrado no Engine |
+| 9 | **CombatUI 60% à esquerda** | CSS conflitante `#combat-ui { left:50%; transform:translateX(-50%) }` | CSS antigo comentado/removido |
+| 10 | **Tela preta ao voltar do combate** | `DungeonScene.onEnter` não chamava `fadeIn` | Adicionado `fadeIn(400)` em todos caminhos de entrada |
+| 11 | **Sem movimento ao voltar do combate** | `InputSystem.onExit` remove listeners, `onEnter` não reanexava | Reanexa `InputSystem.onAdd(engine)` no `DungeonScene.onEnter` |
 
 ---
 
@@ -122,9 +84,14 @@ npm run dev       # Abre http://localhost:5173
 ```
 
 ### Controles
+
 | Tecla | Ação |
 |-------|------|
 | **WASD / Setas** | Move player (1 tile, suave) |
+| **E** | Interage (abre/fecha porta adjacente) |
+| **1/2/3/4** | Combate: Atacar/Defender/Item/Fugir |
+| **Setas + Enter/Z** | Navega menus combate |
+| **ESC/X** | Volta menu golpes → ações |
 | **F1** | Toggle debug (FPS, entity count) |
 | **F2** | Toggle grid visual |
 | **F3** | Toggle colliders |
@@ -132,15 +99,66 @@ npm run dev       # Abre http://localhost:5173
 
 ---
 
-## 🏗️ Próximos Passos (Roadmap)
+## 🏗️ Arquitetura (src/)
 
-1. **Corrigir movimento** — debug prioridade InputSystem → MovementSystem
-2. **Commit limpo** — "feat: movement system functional"
-3. **Combate por turnos** — CombatScene, iniciativa, ações (atacar, item, fugir)
-4. **Sprites reais** — substituir neon por spritesheet do esqueleto
-5. **Save/Load** — localStorage → IndexedDB → MySQL sync
-6. **Procedural melhor** — BSP rooms, chaves/portas, loot, boss
-7. **3D Ready** — trocar CanvasRenderer por Three.jsRenderer (mesma interface)
+```
+src/
+├── main.js                    # Entry point, registra cenas, event handlers
+├── core/
+│   ├── Engine.js              # Game loop, fixed timestep, scene mgmt, render loop
+│   ├── Entity.js              # ECS Entity (id, components Map, tags)
+│   ├── Component.js           # Base Component
+│   ├── System.js              # Base System (priority, requiredComponents)
+│   ├── EventBus.js            # Pub/Sub desacoplado
+│   └── Scene.js               # Container entities + systems (priority sort)
+├── systems/
+│   ├── InputSystem.js         # Teclado → engine.input + lastDirection + lastInteract (E)
+│   ├── MovementSystem.js      # WASD + grid collision + lerp + combate trigger + interação E + escadas
+│   ├── CombatSystem.js        # Turnos, iniciativa speed, ações player, IA inimigo, XP/level
+│   └── RenderSystem.js        # Draw map + entities (zIndex sort)
+├── components/
+│   ├── Position.js            # Grid coords (x, y) + clone()
+│   ├── Velocity.js            # Lerp target + progress + moveTo/stop/update
+│   ├── Sprite.js              # Color/image/spritesheet + animação
+│   ├── Collider.js            # Solid/trigger + AABB + checkAABB(posA, posB, other)
+│   ├── PlayerTag.js           # Stats persistentes (HP, AP, atk, def, level, XP, floor)
+│   └── Combatant.js           # Stats combate (hp, atk, def, spd, AP, XP, status, factories)
+├── map/
+│   ├── GridMap.js             # Tiles Uint8Array + features + proc gen + stairs/doors
+│   └── TileType.js            # Definições walkable/interactable (DOOR_CLOSED/OPEN, STAIRS_UP/DOWN)
+├── renderer/
+│   ├── CanvasRenderer.js      # Canvas 2D impl (abstraído p/ WebGL/Three.js)
+│   └── RenderContext.js       # Camera, alpha, fadeIn/out, flash, debug flags
+├── scenes/
+│   ├── DungeonScene.js        # Mapa proc, spawn, floor transition, combate return
+│   ├── CombatScene.js         # Fade in/out, CombatSystem+CombatUI, component migration
+│   └── MenuScene.js           # Main menu, character select, achievements, customize (locked)
+├── entities/
+│   ├── createPlayer.js        # Factory: usa characterId → stats/cores/moves da classe
+│   └── createEnemy.js         # Factory: zumbi, esqueleto, fantasma, morcego
+├── data/
+│   └── characters.js          # 5 classes: warrior, necromancer, butcher, assassin, cleric
+└── utils/
+    ├── constants.js           # TILE_SIZE, KEYS, DIRS, COLORS, Z_INDEX, GAME_STATE
+    └── math.js                # lerp, clamp, manhattan, grid↔screen
+```
+
+---
+
+## 🎮 Fluxo de Jogo
+
+```
+Menu (seleção classe) → DungeonScene (exploração) 
+    → encosta em inimigo → CombatScene (turn-based Pokémon-style) 
+    → vitória/derrota/fuga → DungeonScene (mesmo andar, player persistido)
+```
+
+**Classes jogáveis:**
+1. **Esqueleto Guerreiro** ⚔️ — Equilibrado (desbloqueado)
+2. **Necromante** 👑 — Mago/summoner (andar 5)
+3. **Carniceiro** 🔪 — Tank/berserker (100 kills)
+4. **Assassino Sombrio** 🗡️ — Speed/crit (3 speedruns)
+5. **Clérigo Corrompido** ⛧ — Healer/support (500 cura)
 
 ---
 
@@ -149,7 +167,7 @@ npm run dev       # Abre http://localhost:5173
 - **Comentários**: máx 2 linhas, português-BR
 - **Nomes**: funções/variáveis em português, termos técnicos em inglês
 - **Commits**: `feat:`, `fix:`, `refactor:`, `docs:`
-- **Arquitetura**: desacoplada, testável, expansível 2D→3D
+- **Arquitetura**: desacoplada, testável, expansível 2D→3D (10 princípios escalabilidade)
 
 ---
 
@@ -162,4 +180,4 @@ git log --oneline -10
 
 ---
 
-*Última atualização: 2026-11-19 — Sessão de fundação da arquitetura e movimento*
+*Última atualização: 2026-11-20 — Fase 1 Combate + Interações Dungeon concluídas*

@@ -36,6 +36,19 @@
   - Respostas ao usuário
 - **Exceções**: termos técnicos, nomes próprios, nomenclatura de código (nomes de funções, variáveis, classes, tabelas SQL)
 
+### 📈 Escalabilidade Alta (Obrigatório)
+- **Arquitetura ECS (Entity-Component-System)** — sistemas desacoplados, components como data-only
+- **Interfaces/Abstrações** — `Renderer` interface permite swap Canvas2D ↔ WebGL ↔ Three.js sem mudar game logic
+- **EventBus global** — comunicação pub/sub entre sistemas/cenas, sem dependências diretas
+- **Scene System** — cada cena encapsula seus systems/entities; `engine.changeScene()` gerencia ciclo de vida
+- **Fixed Timestep** — lógica determinística (60Hz) separada do render (interpolação alpha)
+- **Component Composition** — entidades = bag of components; behavior em systems, não herança
+- **Dependency Inversion** — systems dependem de abstrações (Component, System base), não concreções
+- **Open/Closed** — novos systems/components não exigem modificar código existente
+- **Single Responsibility** — cada system faz uma coisa (Input, Movement, Combat, Render)
+- **Data-Driven** — stats, enemy types, moves em factories/config, não hardcoded
+- **No Circular Deps** — imports unidirecionais: core → systems → components → entities → scenes
+
 ---
 
 ## Stack & Convenções

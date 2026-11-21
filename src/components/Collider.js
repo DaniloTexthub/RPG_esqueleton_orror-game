@@ -28,7 +28,7 @@ export class Collider extends Component {
   }
 
   // AABB check em coordenadas de grid
-  checkAABB(posA, posB) {
+  checkAABB(posA, posB, other) {
     const halfW = this.width / 2;
     const halfH = this.height / 2;
     const otherHalfW = other.width / 2;

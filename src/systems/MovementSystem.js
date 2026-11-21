@@ -7,7 +7,9 @@ import { Velocity } from '../components/Velocity.js';
 import { Collider } from '../components/Collider.js';
 import { PlayerTag } from '../components/PlayerTag.js';
 import { MOVE_DURATION, TILE_TYPE, DIRS, KEYS } from '../utils/constants.js';
-import { isWalkable } from '../map/TileType.js';
+import { isWalkable, getTileDef } from '../map/TileType.js';
+import { eventBus } from '../core/EventBus.js';
+import { INTERACT_KEY } from './InputSystem.js';
 
 export class MovementSystem extends System {
   constructor() {
@@ -116,9 +118,19 @@ export class MovementSystem extends System {
       // AABB check
       if (movingCollider.checkAABB(
         { x: targetX + movingCollider.offsetX, y: targetY + movingCollider.offsetY },
-        { x: otherPos.x + otherCollider.offsetX, y: otherPos.y + otherCollider.offsetY }
+        { x: otherPos.x + otherCollider.offsetX, y: otherPos.y + otherCollider.offsetY },
+        otherCollider
       )) {
-        // Trigger: entity tocou inimigo → combate
+        // Player encostou em inimigo → inicia combate
+        const isPlayer = movingEntity.hasTag('player');
+        const isEnemy = entity.hasTag('enemy');
+        if (isPlayer && isEnemy) {
+          console.log('⚔️ Player encostou em inimigo — iniciando combate!');
+          eventBus.emit('combatStart', { player: movingEntity, enemy: entity });
+          return false; // Bloqueia movimento, combate assume
+        }
+
+        // Trigger genérico (portas, itens, etc)
         if (otherCollider.trigger && otherCollider.onEnter) {
           otherCollider.onEnter(movingEntity, entity);
         }
@@ -131,20 +143,25 @@ export class MovementSystem extends System {
 
   // Update: processa input E movimento suave (lerp)
   update(dt, entities, game) {
-    // 1. Verifica input para iniciar movimento (apenas player)
     const inputSystem = this.engine.getSystem?.('InputSystem');
-    if (inputSystem && inputSystem.lastDirection) {
+    if (!inputSystem) return;
+
+    // 1. Verifica input para iniciar movimento (apenas player)
+    if (inputSystem.lastDirection) {
       const dir = inputSystem.lastDirection;
-      // Procura player nas entities processadas
       const player = entities.find(e => e.hasTag('player'));
       if (player) {
         const moved = this.tryMove(player, dir.x, dir.y);
-        if (moved) {
-          console.log(`🚶 Player moveu: ${dir.name} (${dir.x},${dir.y})`);
-        }
+        if (moved) console.log(`🚶 Player moveu: ${dir.name} (${dir.x},${dir.y})`);
       }
-      // Consome a direção (só move uma vez por pressão)
       inputSystem.lastDirection = null;
+    }
+
+    // 2. Verifica tecla E para interagir (portas, escadas, etc)
+    if (inputSystem.getInteractPressed?.()) {
+      const player = entities.find(e => e.hasTag('player'));
+      if (player) this.handleInteractionAt(player);
+      inputSystem.consumeInteract?.();
     }
 
     // 2. Processa movimento suave (lerp) APENAS para entities que estão movendo
@@ -184,6 +201,9 @@ export class MovementSystem extends System {
       case 'open':
         this.openDoor(x, y);
         break;
+      case 'close':
+        this.closeDoor(x, y);
+        break;
       case 'descend':
         this.engine.eventBus.emit('changeFloor', { direction: 'down' });
         break;
@@ -193,14 +213,48 @@ export class MovementSystem extends System {
     }
   }
 
+  // Interação via tecla E (porta adjacente ou tile atual)
+  handleInteractionAt(entity) {
+    const pos = entity.get(Position);
+    if (!pos) return;
+
+    // 1. Tenta interagir com tile atual (escadas)
+    let interactable = this.gridMap.getInteractable(pos.x, pos.y);
+    if (interactable) {
+      this.handleInteraction(entity, interactable, pos.x, pos.y);
+      return;
+    }
+
+    // 2. Tenta porta adjacente (olha na direção que o player está virado)
+    const inputSystem = this.engine.getSystem?.('InputSystem');
+    const lastDir = inputSystem?.lastDirection || { x: 0, y: 1 }; // default baixo
+    const adjX = pos.x + lastDir.x;
+    const adjY = pos.y + lastDir.y;
+
+    interactable = this.gridMap.getInteractable(adjX, adjY);
+    if (interactable && (interactable.action === 'open' || interactable.action === 'close')) {
+      this.handleInteraction(entity, interactable, adjX, adjY);
+      return;
+    }
+  }
+
   openDoor(x, y) {
     const key = `${x},${y}`;
     const feature = this.gridMap.features.get(key);
     if (feature && feature.type === 'door') {
       feature.state = 'open';
-      // Atualiza tile visual
       this.gridMap.set(x, y, TILE_TYPE.DOOR_OPEN);
       this.engine.eventBus.emit('doorOpened', { x, y });
+    }
+  }
+
+  closeDoor(x, y) {
+    const key = `${x},${y}`;
+    const feature = this.gridMap.features.get(key);
+    if (feature && feature.type === 'door') {
+      feature.state = 'closed';
+      this.gridMap.set(x, y, TILE_TYPE.DOOR_CLOSED);
+      this.engine.eventBus.emit('doorClosed', { x, y });
     }
   }
 
