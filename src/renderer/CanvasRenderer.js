@@ -285,10 +285,12 @@ export class CanvasRenderer {
     this.drawDefaultSprite(sprite, { hasTag: () => false });
   }
 
-  // Debug collider
+  // Debug collider (alinhado com o centro do sprite renderizado)
   drawColliderDebug(pos, collider) {
-    const screenX = pos.x * this.tileSize - this.context.camera.x;
-    const screenY = pos.y * this.tileSize - this.context.camera.y;
+    // O sprite é desenhado com translate(screenX, screenY) + drawImage(-tileSize/2)
+    // Então o centro do sprite na tela = screenX + tileSize/2
+    const screenX = pos.x * this.tileSize - this.context.camera.x + this.tileSize / 2;
+    const screenY = pos.y * this.tileSize - this.context.camera.y + this.tileSize / 2;
     const w = collider.width * this.tileSize;
     const h = collider.height * this.tileSize;
     const ox = collider.offsetX * this.tileSize;
@@ -298,6 +300,7 @@ export class CanvasRenderer {
     this.ctx.strokeStyle = collider.solid ? '#ff0000' : '#ffff00';
     this.ctx.lineWidth = 1;
     this.ctx.setLineDash([4, 4]);
+    // Centro alinhado com o sprite (screenX + ox)
     this.ctx.strokeRect(
       screenX - w/2 + ox,
       screenY - h/2 + oy,

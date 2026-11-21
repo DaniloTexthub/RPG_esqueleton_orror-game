@@ -34,25 +34,30 @@ export class RenderContext {
     this.flashColor = color;
   }
 
-  // Atualiza camera para seguir entity
+  // Atualiza camera para seguir entity (centro do tile)
   follow(entity, canvasWidth, canvasHeight, tileSize) {
     if (!entity) return;
     const pos = entity.get('Position');
     if (!pos) return;
 
-    const screenX = pos.x * tileSize;
-    const screenY = pos.y * tileSize;
+    // Centro do tile = pos.x * tileSize + tileSize/2
+    const screenX = pos.x * tileSize + tileSize / 2;
+    const screenY = pos.y * tileSize + tileSize / 2;
 
     this.camera.x = screenX - canvasWidth / 2;
     this.camera.y = screenY - canvasHeight / 2;
   }
 
-  // Clamp camera aos limites do mapa
+  // Clamp camera aos limites do mapa (considera centro do tile)
   clamp(mapWidth, mapHeight, canvasWidth, canvasHeight, tileSize) {
-    const maxX = mapWidth * tileSize - canvasWidth;
-    const maxY = mapHeight * tileSize - canvasHeight;
-    this.camera.x = Math.max(0, Math.min(maxX, this.camera.x));
-    this.camera.y = Math.max(0, Math.min(maxY, this.camera.y));
+    // Camera pode ir até onde o centro do tile da borda ainda é visível
+    const halfTile = tileSize / 2;
+    const minX = halfTile - canvasWidth / 2;
+    const minY = halfTile - canvasHeight / 2;
+    const maxX = mapWidth * tileSize - halfTile - canvasWidth / 2;
+    const maxY = mapHeight * tileSize - halfTile - canvasHeight / 2;
+    this.camera.x = Math.max(minX, Math.min(maxX, this.camera.x));
+    this.camera.y = Math.max(minY, Math.min(maxY, this.camera.y));
   }
 
   // Fade in (preto -> normal)
