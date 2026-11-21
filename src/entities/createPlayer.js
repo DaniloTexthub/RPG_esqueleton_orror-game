@@ -26,16 +26,27 @@ export function createPlayer(x, y, characterId = 'skeleton_warrior') {
   // Velocidade (movimento suave)
   entity.add(new Velocity());
 
-  // Sprite - usa cores da classe
-  entity.add(new Sprite({
-    type: 'color',
-    color: colors.color,
-    accentColor: colors.accent,
+  // Sprite - usa spritesheet com animações (placeholder para assets reais)
+  const sprite = new Sprite({
+    type: 'spritesheet',
+    sheetSrc: `/assets/sprites/characters/${characterId}.png`, // Placeholder path
+    frameWidth: TILE_SIZE,
+    frameHeight: TILE_SIZE,
+    framesPerRow: 6,
     offsetX: 0,
     offsetY: 0,
     scale: 1,
-    zIndex: 20
-  }));
+    zIndex: 20,
+    // Fallback cor da classe (enquanto não tem spritesheet)
+    color: colors.color,
+    accentColor: colors.accent,
+    // Animações padrão do esqueleto
+    animations: Sprite.createSkeletonAnimations(),
+    currentAnimation: 'idle'
+  });
+  // Inicia animação idle
+  sprite.playAnimation('idle');
+  entity.add(sprite);
 
   // Collider - sólido, 1x1 tile
   entity.add(new Collider({

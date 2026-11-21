@@ -3,6 +3,7 @@
 
 import { Scene } from '../core/Scene.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { AnimationSystem } from '../systems/AnimationSystem.js';
 import { CombatUI } from '../ui/CombatUI.js';
 import { Combatant } from '../components/Combatant.js';
 import { eventBus } from '../core/EventBus.js';
@@ -22,6 +23,7 @@ export class CombatScene extends Scene {
     super.init(game);
     this.combatSystem = new CombatSystem();
     this.addSystem(this.combatSystem);
+    this.addSystem(new AnimationSystem());
 
     // Cria UI (precisa do renderer)
     // Será inicializado no onEnter quando renderer estiver pronto

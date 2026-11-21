@@ -55,18 +55,25 @@
 - `src/entities/createPlayer.js` — **Aceita characterId, usa stats/cores da classe**
 - `src/systems/InputSystem.js` — **INTERACT_KEY (E), getInteractPressed/consumeInteract**
 
+**Arquivos criados/modificados na Fase 2 (Sprites & Visual):**
+- `src/components/Sprite.js` — **Sistema de animações nomeadas (idle/walk/attack/hit/death), playAnimation, facing**
+- `src/systems/AnimationSystem.js` — **NOVO: Troca automática de animação por estado (movimento, combate, morte)**
+- `src/entities/createPlayer.js` — **Usa spritesheet + Sprite.createSkeletonAnimations(), fallback neon**
+- `src/entities/createEnemy.js` — **Usa spritesheet + Sprite.createEnemyAnimations(), fallback neon**
+- `src/renderer/CanvasRenderer.js` — **Lazy-load spritesheet via sheetSrc, fallback para drawDefaultSprite**
+
 ---
 
 ## 🎨 Fase 2 — Sprites & Visual
 
-| ID | Tarefa | Prioridade | Estimativa | Dependências |
-|----|--------|------------|------------|--------------|
-| S01 | Spritesheet do esqueleto (idle, walk, attack, hit, death) | 🔴 Alta | 4h | — |
-| S02 | Spritesheets inimigos (zumbi, esqueleto, fantasma, morcego) | 🟡 Média | 4h | S01 |
-| S03 | Tileset masmorra (parede, chão, porta, escada, decalques) | 🟡 Média | 3h | S01 |
-| S04 | Sistema de animação no Sprite component (frames, loop, speed) | 🔴 Alta | 2h | S01 |
-| S05 | Substituir neon debug por sprites reais | 🔴 Alta | 1h | S01, S04 |
-| S06 | Partículas simples (sangue, poeira, hit spark) | 🟢 Baixa | 2h | S04 |
+| ID | Tarefa | Prioridade | Estimativa | Dependências | Status |
+|----|--------|------------|------------|--------------|--------|
+| S01 | Spritesheet do esqueleto (idle, walk, attack, hit, death) | 🔴 Alta | 4h | — | ✅ (estrutura + placeholder) |
+| S02 | Spritesheets inimigos (zumbi, esqueleto, fantasma, morcego) | 🟡 Média | 4h | S01 | ✅ (estrutura + placeholder) |
+| S03 | Tileset masmorra (parede, chão, porta, escada, decalques) | 🟡 Média | 3h | S01 | ⏳ |
+| S04 | Sistema de animação no Sprite component (frames, loop, speed) | 🔴 Alta | 2h | S01 | ✅ |
+| S05 | Substituir neon debug por sprites reais | 🔴 Alta | 1h | S01, S04 | ✅ (factories usam spritesheet, fallback neon) |
+| S06 | Partículas simples (sangue, poeira, hit spark) | 🟢 Baixa | 2h | S04 | ⏳ |
 
 ---
 

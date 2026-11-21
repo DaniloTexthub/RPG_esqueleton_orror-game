@@ -14,6 +14,7 @@ import { createPlayer } from '../entities/createPlayer.js';
 import { createEnemy } from '../entities/createEnemy.js';
 import { InputSystem } from '../systems/InputSystem.js';
 import { MovementSystem } from '../systems/MovementSystem.js';
+import { AnimationSystem } from '../systems/AnimationSystem.js';
 import { RenderSystem } from '../systems/RenderSystem.js';
 import { TILE_TYPE, COLORS, MOVE_DURATION } from '../utils/constants.js';
 import { eventBus } from '../core/EventBus.js';
@@ -38,6 +39,7 @@ export class DungeonScene extends Scene {
     // Adiciona systems à CENA (essencial!)
     this.addSystem(new InputSystem());
     this.addSystem(new MovementSystem());
+    this.addSystem(new AnimationSystem());
     // RenderSystem é global no engine, não precisa aqui
 
     // Spawn player (será sobrescrito no onEnter se vier do menu)

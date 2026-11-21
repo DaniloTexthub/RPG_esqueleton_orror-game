@@ -18,7 +18,8 @@ const ENEMY_TYPES = {
     attack: 8,
     defense: 2,
     speed: 3,
-    xp: 10
+    xp: 10,
+    spriteId: 'zombie'
   },
   // Esqueleto guerreiro
   skeleton_warrior: {
@@ -29,7 +30,8 @@ const ENEMY_TYPES = {
     attack: 12,
     defense: 5,
     speed: 5,
-    xp: 20
+    xp: 20,
+    spriteId: 'skeleton_enemy'
   },
   // Fantasma
   ghost: {
@@ -40,7 +42,8 @@ const ENEMY_TYPES = {
     attack: 15,
     defense: 1,
     speed: 7,
-    xp: 25
+    xp: 25,
+    spriteId: 'ghost'
   },
   // Morcego gigante
   giant_bat: {
@@ -51,7 +54,8 @@ const ENEMY_TYPES = {
     attack: 10,
     defense: 0,
     speed: 10,
-    xp: 15
+    xp: 15,
+    spriteId: 'giant_bat'
   }
 };
 
@@ -65,13 +69,24 @@ export function createEnemy(x, y, typeId = 1) {
   entity.add(new Position(x, y));
   entity.add(new Velocity());
 
-  entity.add(new Sprite({
-    type: 'color',
+  // Sprite - usa spritesheet com animações (placeholder para assets reais)
+  const sprite = new Sprite({
+    type: 'spritesheet',
+    sheetSrc: `/assets/sprites/enemies/${type.spriteId}.png`, // Placeholder path
+    frameWidth: TILE_SIZE,
+    frameHeight: TILE_SIZE,
+    framesPerRow: 4,
+    scale: 0.9,
+    zIndex: 15,
+    // Fallback cor do tipo (enquanto não tem spritesheet)
     color: type.color,
     accentColor: type.accentColor,
-    scale: 0.9,
-    zIndex: 15
-  }));
+    // Animações padrão de inimigos
+    animations: Sprite.createEnemyAnimations(),
+    currentAnimation: 'idle'
+  });
+  sprite.playAnimation('idle');
+  entity.add(sprite);
 
   entity.add(new Collider({
     solid: true,

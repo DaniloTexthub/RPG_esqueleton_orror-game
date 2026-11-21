@@ -178,6 +178,16 @@ export class CanvasRenderer {
 
     if (!pos || !sprite) return;
 
+    // Lazy-load spritesheet se tem sheetSrc mas não sheet
+    if (sprite.type === 'spritesheet' && sprite.sheetSrc && !sprite.sheet) {
+      this.loadImage(sprite.sheetSrc).then(img => {
+        sprite.sheet = img;
+      }).catch(() => {
+        // Falhou - usa fallback color
+        sprite.type = 'color';
+      });
+    }
+
     // Posição interpolada
     let renderX = pos.x;
     let renderY = pos.y;
@@ -210,6 +220,9 @@ export class CanvasRenderer {
             frame.x, frame.y, frame.w, frame.h,
             -this.tileSize/2, -this.tileSize/2, this.tileSize, this.tileSize
           );
+        } else {
+          // Spritesheet não carregado ainda - usa fallback color
+          this.drawDefaultSprite(sprite, entity);
         }
         break;
       case 'skeleton':
