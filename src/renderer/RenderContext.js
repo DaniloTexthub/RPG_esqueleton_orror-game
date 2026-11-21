@@ -48,6 +48,16 @@ export class RenderContext {
     this.camera.y = screenY - canvasHeight / 2;
   }
 
+  // Camera follow com coordenadas já interpoladas (para movimento suave)
+  followInterpolated(gridX, gridY, canvasWidth, canvasHeight, tileSize) {
+    // Centro do tile interpolado
+    const screenX = gridX * tileSize + tileSize / 2;
+    const screenY = gridY * tileSize + tileSize / 2;
+
+    this.camera.x = screenX - canvasWidth / 2;
+    this.camera.y = screenY - canvasHeight / 2;
+  }
+
   // Clamp camera aos limites do mapa (considera centro do tile)
   clamp(mapWidth, mapHeight, canvasWidth, canvasHeight, tileSize) {
     // Camera pode ir até onde o centro do tile da borda ainda é visível

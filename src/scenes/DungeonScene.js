@@ -258,14 +258,29 @@ export class DungeonScene extends Scene {
     super.update(dt);
     this.updatePlayerUI();
 
-    // Camera follow
+    // Camera follow - usa posição interpolada durante movimento para evitar desync visual
     if (this.player && this.engine.renderer) {
-      this.engine.renderer.context.follow(
-        this.player,
-        this.engine.canvas.width,
-        this.engine.canvas.height,
-        32
-      );
+      const vel = this.player.get('Velocity');
+      const pos = this.player.get('Position');
+
+      if (vel && vel.moving && pos) {
+        // Usa posição interpolada (lerp) para câmera suave
+        const interp = vel.getInterpolatedPosition(pos.x, pos.y);
+        this.engine.renderer.context.followInterpolated(
+          interp.x, interp.y,
+          this.engine.canvas.width,
+          this.engine.canvas.height,
+          32
+        );
+      } else {
+        // Parado: usa posição lógica normal
+        this.engine.renderer.context.follow(
+          this.player,
+          this.engine.canvas.width,
+          this.engine.canvas.height,
+          32
+        );
+      }
       this.engine.renderer.context.clamp(
         this.gridMap.width, this.gridMap.height,
         this.engine.canvas.width, this.engine.canvas.height,
