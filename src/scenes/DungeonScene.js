@@ -18,6 +18,7 @@ import { AnimationSystem } from '../systems/AnimationSystem.js';
 import { RenderSystem } from '../systems/RenderSystem.js';
 import { TILE_TYPE, COLORS, MOVE_DURATION } from '../utils/constants.js';
 import { eventBus } from '../core/EventBus.js';
+import { lerp } from '../utils/math.js';
 
 export class DungeonScene extends Scene {
   constructor() {
@@ -265,9 +266,9 @@ export class DungeonScene extends Scene {
 
       if (vel && vel.moving && pos) {
         // Usa posição interpolada (lerp) para câmera suave
-        const interp = vel.getInterpolatedPosition(pos.x, pos.y);
         this.engine.renderer.context.followInterpolated(
-          interp.x, interp.y,
+          lerp(pos.previousX, pos.x, vel.progress),
+          lerp(pos.previousY, pos.y, vel.progress),
           this.engine.canvas.width,
           this.engine.canvas.height,
           32

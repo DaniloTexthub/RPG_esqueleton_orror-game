@@ -4,7 +4,8 @@
 import { RenderContext } from './RenderContext.js';
 import { TILE_SIZE, COLORS, Z_INDEX, TILE_TYPE } from '../utils/constants.js';
 import { getTileDef } from '../map/TileType.js';
-import { lerpVec } from '../utils/math.js';
+import { lerp } from '../utils/math.js';
+import { eventBus } from '../core/EventBus.js';
 
 export class CanvasRenderer {
   constructor() {
@@ -16,6 +17,21 @@ export class CanvasRenderer {
 
     // Cache de imagens carregadas
     this.imageCache = new Map();
+    this.loadingImages = new Set();
+    this.particles = [];
+
+    // Efeitos visuais curtos: sangue, poeira e impacto
+    this.unsubscribeParticles = eventBus.on('combatAction', data => {
+      if (data.action === 'attack' && data.target?.entity) {
+        const pos = data.target.entity.get('Position');
+        if (pos) this.emitParticles(pos.x, pos.y, 'hit', data.damage || 4);
+      }
+    });
+    this.unsubscribeDust = eventBus.on('entityMoved', data => {
+      if (data.entity?.hasTag?.('player')) {
+        this.emitParticles(data.x, data.y, 'dust', 3);
+      }
+    });
 
     // Debug
     this.debug = false;
@@ -38,16 +54,72 @@ export class CanvasRenderer {
   // Carrega imagem (com cache)
   async loadImage(src) {
     if (this.imageCache.has(src)) return this.imageCache.get(src);
+    if (this.loadingImages.has(src)) return null;
+    this.loadingImages.add(src);
 
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
+        this.loadingImages.delete(src);
         this.imageCache.set(src, img);
         resolve(img);
       };
-      img.onerror = reject;
+      img.onerror = () => {
+        this.loadingImages.delete(src);
+        reject(new Error(`Falha ao carregar imagem: ${src}`));
+      };
       img.src = src;
     });
+  }
+
+  // Cria partículas simples sem entidade ECS dedicada
+  emitParticles(gridX, gridY, type = 'hit', count = 5) {
+    const colors = type === 'dust'
+      ? ['#8a8175', '#b1a38f']
+      : type === 'blood'
+        ? ['#8b0000', '#d20a20']
+        : ['#d8d0b4', '#8b0000'];
+
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        x: gridX * this.tileSize + this.tileSize / 2,
+        y: gridY * this.tileSize + this.tileSize / 2,
+        vx: (Math.random() - 0.5) * (type === 'dust' ? 24 : 48),
+        vy: (Math.random() - 0.75) * (type === 'dust' ? 12 : 40),
+        life: type === 'dust' ? 260 : 420,
+        maxLife: type === 'dust' ? 260 : 420,
+        size: type === 'dust' ? 3 : 2 + Math.random() * 2,
+        color: colors[i % colors.length]
+      });
+    }
+  }
+
+  updateParticles(dt) {
+    for (const particle of this.particles) {
+      particle.life -= dt;
+      particle.x += particle.vx * dt / 1000;
+      particle.y += particle.vy * dt / 1000;
+      particle.vy += (particle.color === '#8a8175' ? 8 : 28) * dt / 1000;
+    }
+    this.particles = this.particles.filter(particle => particle.life > 0);
+  }
+
+  drawParticles() {
+    if (this.particles.length === 0) return;
+    this.ctx.save();
+    for (const particle of this.particles) {
+      const screenX = particle.x - this.context.camera.x;
+      const screenY = particle.y - this.context.camera.y;
+      this.ctx.globalAlpha = Math.max(0, particle.life / particle.maxLife);
+      this.ctx.fillStyle = particle.color;
+      this.ctx.fillRect(
+        Math.round(screenX - particle.size / 2),
+        Math.round(screenY - particle.size / 2),
+        particle.size,
+        particle.size
+      );
+    }
+    this.ctx.restore();
   }
 
   // Início do frame
@@ -56,9 +128,9 @@ export class CanvasRenderer {
     this.clear();
   }
 
-  // Limpa tela - COR NEON PARA DEBUG
+  // Limpa tela usando o fundo escuro do tema
   clear() {
-    this.ctx.fillStyle = '#001100'; // Verde muito escuro - visível se tudo mais falhar
+    this.ctx.fillStyle = '#090909';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
@@ -85,86 +157,69 @@ export class CanvasRenderer {
     });
   }
 
-  // Desenha um tile - CORES NEON DEBUG
+  // Desenha um tile com acabamento visual discreto
   drawTile(gx, gy, type) {
     const screenX = gx * this.tileSize - this.context.camera.x;
     const screenY = gy * this.tileSize - this.context.camera.y;
+    const definition = getTileDef(type);
+    const variant = ((gx * 17 + gy * 31) & 3);
 
-    // Cores neon por tipo
-    const neonColors = {
-      0: '#003300',  // FLOOR - verde escuro
-      1: '#330000',  // WALL - vermelho escuro
-      2: '#333300',  // DOOR_CLOSED - amarelo escuro
-      3: '#003333',  // DOOR_OPEN - cyan escuro
-      4: '#330033',  // STAIRS_DOWN - magenta escuro
-      5: '#330033',  // STAIRS_UP - magenta escuro
-      6: '#331100',  // TRAP - laranja escuro
-      7: '#003333'   // ITEM - cyan escuro
-    };
-
-    this.ctx.fillStyle = neonColors[type] || '#111111';
+    this.ctx.fillStyle = variant === 0 ? definition.colorAlt : definition.color;
     this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
 
-    // Grid lines neon
-    this.ctx.strokeStyle = '#00ff00';
-    this.ctx.lineWidth = 0.5;
-    this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+    if (type === TILE_TYPE.FLOOR) {
+      this.ctx.fillStyle = variant === 1 ? '#1d1d1d' : '#111111';
+      if (variant === 1) this.ctx.fillRect(screenX + 7, screenY + 9, 2, 2);
+      if (variant === 2) this.ctx.fillRect(screenX + 21, screenY + 24, 3, 1);
+    }
 
-    // Wall = borda grossa vermelha
-    if (type === 1) {
-      this.ctx.strokeStyle = '#ff0000';
-      this.ctx.lineWidth = 2;
-      this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+    if (type === TILE_TYPE.WALL) {
+      this.ctx.fillStyle = '#151515';
+      this.ctx.fillRect(screenX + 1, screenY + 1, this.tileSize - 2, 4);
+      this.ctx.fillStyle = '#242424';
+      this.ctx.fillRect(screenX + 3, screenY + 8, this.tileSize - 6, 9);
+      this.ctx.fillRect(screenX + 1, screenY + 20, this.tileSize - 2, 9);
+      this.ctx.strokeStyle = '#0b0b0b';
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(screenX + 0.5, screenY + 0.5, this.tileSize - 1, this.tileSize - 1);
     }
   }
 
-  // Desenha feature (porta, escada, etc) - NEON DEBUG
+  // Desenha portas e escadas com formas legíveis
   drawFeature(gx, gy, feature) {
     const screenX = gx * this.tileSize - this.context.camera.x;
     const screenY = gy * this.tileSize - this.context.camera.y;
 
     switch (feature.type) {
       case 'door':
-        this.ctx.fillStyle = feature.state === 'closed' ? '#ffaa00' : '#00ffaa';
-        this.ctx.shadowColor = this.ctx.fillStyle;
-        this.ctx.shadowBlur = 10;
-        this.ctx.fillRect(screenX + 2, screenY + 2, this.tileSize - 4, this.tileSize - 4);
-        this.ctx.shadowBlur = 0;
-        // Texto D
-        this.ctx.fillStyle = '#000';
-        this.ctx.font = 'bold 16px monospace';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('D', screenX + this.tileSize/2, screenY + this.tileSize/2 + 5);
+        this.ctx.fillStyle = feature.state === 'closed' ? '#4a2a1a' : '#251a12';
+        this.ctx.fillRect(screenX + 4, screenY + 3, this.tileSize - 8, this.tileSize - 6);
+        this.ctx.strokeStyle = '#7a4a2a';
+        this.ctx.strokeRect(screenX + 6.5, screenY + 5.5, this.tileSize - 13, this.tileSize - 11);
+        this.ctx.fillStyle = '#c0a070';
+        this.ctx.fillRect(screenX + this.tileSize - 10, screenY + 15, 2, 2);
         break;
       case 'stairs_down':
-        this.ctx.fillStyle = '#ff00ff';
-        this.ctx.shadowColor = '#ff00ff';
-        this.ctx.shadowBlur = 15;
-        this.ctx.beginPath();
-        this.ctx.moveTo(screenX + this.tileSize/2, screenY + 4);
-        this.ctx.lineTo(screenX + this.tileSize - 4, screenY + this.tileSize - 4);
-        this.ctx.lineTo(screenX + 4, screenY + this.tileSize - 4);
-        this.ctx.fill();
-        this.ctx.shadowBlur = 0;
-        this.ctx.fillStyle = '#000';
-        this.ctx.font = 'bold 14px monospace';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('>', screenX + this.tileSize/2, screenY + this.tileSize/2 + 5);
+        this.ctx.strokeStyle = '#77745f';
+        this.ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const y = screenY + 7 + i * 5;
+          this.ctx.beginPath();
+          this.ctx.moveTo(screenX + 6, y);
+          this.ctx.lineTo(screenX + this.tileSize - 6, y);
+          this.ctx.stroke();
+        }
         break;
       case 'stairs_up':
-        this.ctx.fillStyle = '#ffff00';
-        this.ctx.shadowColor = '#ffff00';
-        this.ctx.shadowBlur = 15;
-        this.ctx.beginPath();
-        this.ctx.moveTo(screenX + this.tileSize/2, screenY + this.tileSize - 4);
-        this.ctx.lineTo(screenX + this.tileSize - 4, screenY + 4);
-        this.ctx.lineTo(screenX + 4, screenY + 4);
-        this.ctx.fill();
-        this.ctx.shadowBlur = 0;
-        this.ctx.fillStyle = '#000';
-        this.ctx.font = 'bold 14px monospace';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('<', screenX + this.tileSize/2, screenY + this.tileSize/2 + 5);
+        this.ctx.strokeStyle = '#77745f';
+        this.ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const y = screenY + 25 - i * 5;
+          this.ctx.beginPath();
+          this.ctx.moveTo(screenX + 6, y);
+          this.ctx.lineTo(screenX + this.tileSize - 6, y);
+          this.ctx.stroke();
+        }
         break;
     }
   }
@@ -178,14 +233,16 @@ export class CanvasRenderer {
 
     if (!pos || !sprite) return;
 
-    // Lazy-load spritesheet se tem sheetSrc mas não sheet
-    if (sprite.type === 'spritesheet' && sprite.sheetSrc && !sprite.sheet) {
+    // Lazy-load com cache; falha mantém o fallback sem repetir a requisição
+    if (sprite.sheetSrc && !sprite.sheet) {
       this.loadImage(sprite.sheetSrc).then(img => {
-        sprite.sheet = img;
-      }).catch(() => {
-        // Falhou - usa fallback color
-        sprite.type = 'color';
-      });
+        if (img) sprite.sheet = img;
+      }).catch(() => {});
+    }
+    if (sprite.imageSrc && !sprite.image) {
+      this.loadImage(sprite.imageSrc).then(img => {
+        if (img) sprite.image = img;
+      }).catch(() => {});
     }
 
     // Posição interpolada
@@ -193,13 +250,13 @@ export class CanvasRenderer {
     let renderY = pos.y;
 
     if (vel && vel.moving) {
-      const interp = vel.getInterpolatedPosition(pos.x, pos.y);
-      renderX = interp.x;
-      renderY = interp.y;
+      renderX = lerp(pos.previousX, pos.x, vel.progress);
+      renderY = lerp(pos.previousY, pos.y, vel.progress);
     }
 
-    const screenX = renderX * this.tileSize - this.context.camera.x + sprite.offsetX;
-    const screenY = renderY * this.tileSize - this.context.camera.y + sprite.offsetY;
+    // Sempre centraliza a arte no centro do tile
+    const screenX = renderX * this.tileSize - this.context.camera.x + this.tileSize / 2 + sprite.offsetX;
+    const screenY = renderY * this.tileSize - this.context.camera.y + this.tileSize / 2 + sprite.offsetY;
 
     this.ctx.save();
     this.ctx.translate(screenX, screenY);
@@ -209,7 +266,13 @@ export class CanvasRenderer {
     switch (sprite.type) {
       case 'image':
         if (sprite.image) {
-          this.ctx.drawImage(sprite.image, -this.tileSize/2, -this.tileSize/2, this.tileSize, this.tileSize);
+          this.ctx.drawImage(
+            sprite.image,
+            -this.tileSize / 2,
+            -this.tileSize / 2,
+            this.tileSize,
+            this.tileSize
+          );
         }
         break;
       case 'spritesheet':
@@ -218,7 +281,10 @@ export class CanvasRenderer {
           this.ctx.drawImage(
             sprite.sheet,
             frame.x, frame.y, frame.w, frame.h,
-            -this.tileSize/2, -this.tileSize/2, this.tileSize, this.tileSize
+            -frame.w / 2,
+            -frame.h / 2,
+            frame.w,
+            frame.h
           );
         } else {
           // Spritesheet não carregado ainda - usa fallback color
@@ -236,47 +302,20 @@ export class CanvasRenderer {
     this.ctx.restore();
 
     // Debug: collider box
-    if (this.debug && this.context.showColliders && collider) {
-      this.drawColliderDebug(pos, collider);
+    if (this.context.showColliders && collider) {
+      this.drawColliderDebug(pos, vel, collider);
     }
   }
 
-  // Sprite padrão: QUADRADOS NEON BRILHANTES para debug visual
+  // Sprite fallback discreto para assets ainda não carregados
   drawDefaultSprite(sprite, entity) {
     const isPlayer = entity.hasTag('player');
     const half = this.tileSize / 2;
-
-    if (isPlayer) {
-      // PLAYER: Quadrado VERDE NEON brilhante
-      this.ctx.fillStyle = '#00ff00';
-      this.ctx.shadowColor = '#00ff00';
-      this.ctx.shadowBlur = 15;
-      this.ctx.fillRect(-half + 2, -half + 2, this.tileSize - 4, this.tileSize - 4);
-
-      // Olhos brancos
-      this.ctx.fillStyle = '#fff';
-      this.ctx.shadowBlur = 0;
-      this.ctx.fillRect(-half + 6, -half + 6, 4, 4);
-      this.ctx.fillRect(half - 10, -half + 6, 4, 4);
-    } else {
-      // INIMIGOS: Quadrado VERMELHO NEON
-      this.ctx.fillStyle = '#ff0044';
-      this.ctx.shadowColor = '#ff0044';
-      this.ctx.shadowBlur = 10;
-      this.ctx.fillRect(-half + 4, -half + 4, this.tileSize - 8, this.tileSize - 8);
-
-      // X branco
-      this.ctx.strokeStyle = '#fff';
-      this.ctx.lineWidth = 3;
-      this.ctx.shadowBlur = 0;
-      this.ctx.beginPath();
-      this.ctx.moveTo(-half + 8, -half + 8);
-      this.ctx.lineTo(half - 8, half - 8);
-      this.ctx.moveTo(half - 8, -half + 8);
-      this.ctx.lineTo(-half + 8, half - 8);
-      this.ctx.stroke();
-    }
-    this.ctx.shadowBlur = 0;
+    this.ctx.fillStyle = sprite.color || (isPlayer ? COLORS.PLAYER : COLORS.ENEMY);
+    this.ctx.fillRect(-half + 5, -half + 4, this.tileSize - 10, this.tileSize - 8);
+    this.ctx.fillStyle = sprite.accentColor || (isPlayer ? COLORS.PLAYER_ACCENT : COLORS.ENEMY_ACCENT);
+    this.ctx.fillRect(-half + 8, -half + 7, 4, 4);
+    this.ctx.fillRect(half - 12, -half + 7, 4, 4);
   }
 
   // Skeleton avançado (partes separadas - futuro)
@@ -286,11 +325,16 @@ export class CanvasRenderer {
   }
 
   // Debug collider (alinhado com o centro do sprite renderizado)
-  drawColliderDebug(pos, collider) {
-    // O sprite é desenhado com translate(screenX, screenY) + drawImage(-tileSize/2)
-    // Então o centro do sprite na tela = screenX + tileSize/2
-    const screenX = pos.x * this.tileSize - this.context.camera.x + this.tileSize / 2;
-    const screenY = pos.y * this.tileSize - this.context.camera.y + this.tileSize / 2;
+  drawColliderDebug(pos, vel, collider) {
+    let renderX = pos.x;
+    let renderY = pos.y;
+    if (vel?.moving) {
+      renderX = lerp(pos.previousX, pos.x, vel.progress);
+      renderY = lerp(pos.previousY, pos.y, vel.progress);
+    }
+
+    const screenX = renderX * this.tileSize - this.context.camera.x + this.tileSize / 2;
+    const screenY = renderY * this.tileSize - this.context.camera.y + this.tileSize / 2;
     const w = collider.width * this.tileSize;
     const h = collider.height * this.tileSize;
     const ox = collider.offsetX * this.tileSize;

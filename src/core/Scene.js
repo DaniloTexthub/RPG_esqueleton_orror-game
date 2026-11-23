@@ -52,15 +52,11 @@ export class Scene {
       const matching = system.filter(activeEntities);
 
       if (matching.length > 0) {
-        console.log(`   ▶️ Chamando ${system.constructor.name}.update (matching: ${matching.length})`);
         system.update(dt, matching, this.game);
       }
       // Systems sem requiredComponents TAMBÉM precisam update
       else if (system.requiredComponents.length === 0) {
-        console.log(`   ▶️ Chamando ${system.constructor.name}.update (sem requiredComponents)`);
         system.update(dt, [], this.game);
-      } else {
-        console.log(`   ⏭️ Pulando ${system.constructor.name} (matching: 0)`);
       }
     }
 

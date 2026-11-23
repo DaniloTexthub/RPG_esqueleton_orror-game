@@ -16,7 +16,6 @@ export class RenderSystem extends System {
 
   onAdd(game) {
     this.engine = game;
-    console.log('✅ RenderSystem.onAdd() chamado - engine setado');
   }
 
   update(dt, entities, game) {
@@ -59,8 +58,10 @@ export class RenderSystem extends System {
 
     // 4. Desenha cada entity
     for (const { entity, sprite, pos } of renderables) {
-      sprite.update(this.engine.lastFrameDt || 16);
       renderer.drawEntity(entity);
     }
+
+    renderer.updateParticles?.(this.engine.lastFrameDt || 16);
+    renderer.drawParticles?.();
   }
 }

@@ -42,6 +42,8 @@ export class CombatScene extends Scene {
 
     // Garante que ambos têm Combatant component
     this.ensureCombatantComponents();
+    this.playerEntity.get(Combatant).entity = this.playerEntity;
+    this.enemyEntity.get(Combatant).entity = this.enemyEntity;
 
     // Inicializa UI com renderer
     if (this.engine?.renderer && !this.combatUI) {
@@ -113,6 +115,7 @@ export class CombatScene extends Scene {
           xpToNext: playerTag.xpToNext,
           level: playerTag.level
         });
+        combatant.entity = this.playerEntity;
         this.playerEntity.add(combatant);
         // Sincroniza de volta ao PlayerTag
         this.syncPlayerTag(combatant);
@@ -124,6 +127,7 @@ export class CombatScene extends Scene {
       const collider = this.enemyEntity.get('Collider');
       if (collider?.enemyData) {
         const combatant = Combatant.createEnemy(collider.enemyData);
+        combatant.entity = this.enemyEntity;
         this.enemyEntity.add(combatant);
       }
     }

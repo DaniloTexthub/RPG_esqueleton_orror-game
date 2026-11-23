@@ -34,9 +34,6 @@ export class MovementSystem extends System {
     const vel = entity.get(Velocity);
     const collider = entity.get(Collider);
 
-    // DEBUG
-    console.log(`🔧 tryMove: dir=(${dirX},${dirY}) | pos=(${pos?.x},${pos?.y}) | vel.moving=${vel?.moving} | gridMap=${!!this.gridMap} | collider=${!!collider}`);
-
     if (!pos || !vel || vel.moving) return false; // Já está movendo
 
     const targetX = pos.x + dirX;
@@ -44,12 +41,10 @@ export class MovementSystem extends System {
 
     // Verifica colisão com mapa
     const mapColl = this.checkMapCollision(targetX, targetY, collider);
-    console.log(`   checkMapCollision(${targetX},${targetY}) = ${mapColl}`);
     if (!mapColl) return false; // Bloqueado por parede/porta
 
     // Verifica colisão com outras entities (solid)
     const entColl = this.checkEntityCollision(entity, targetX, targetY);
-    console.log(`   checkEntityCollision = ${entColl}`);
     if (!entColl) return false; // Bloqueado por outra entity
 
     // Inicia movimento suave
@@ -61,16 +56,12 @@ export class MovementSystem extends System {
     pos.x = targetX;
     pos.y = targetY;
 
-    console.log(`✅ Movimento iniciado para (${targetX},${targetY})`);
     return true;
   }
 
   // Colisão com tiles do mapa
   checkMapCollision(x, y, collider) {
     if (!collider || !collider.solid) return true; // Ghost mode
-
-    // DEBUG
-    console.log(`   🔍 checkMapCollision: gridMap=${!!this.gridMap} | x=${x},y=${y}`);
 
     if (!this.gridMap) {
       console.warn('⚠️ checkMapCollision: gridMap é undefined!');
@@ -80,7 +71,6 @@ export class MovementSystem extends System {
     // Verifica tile principal
     const tileType = this.gridMap.get(x, y);
     const walkable = isWalkable(tileType);
-    console.log(`   Tile (${x},${y}) = type ${tileType} | walkable=${walkable}`);
     if (!walkable) return false;
 
     // Se entity > 1 tile, verifica todos
@@ -125,7 +115,6 @@ export class MovementSystem extends System {
         const isPlayer = movingEntity.hasTag('player');
         const isEnemy = entity.hasTag('enemy');
         if (isPlayer && isEnemy) {
-          console.log('⚔️ Player encostou em inimigo — iniciando combate!');
           eventBus.emit('combatStart', { player: movingEntity, enemy: entity });
           return false; // Bloqueia movimento, combate assume
         }
@@ -152,7 +141,6 @@ export class MovementSystem extends System {
       const player = entities.find(e => e.hasTag('player'));
       if (player) {
         const moved = this.tryMove(player, dir.x, dir.y);
-        if (moved) console.log(`🚶 Player moveu: ${dir.name} (${dir.x},${dir.y})`);
       }
       inputSystem.lastDirection = null;
     }

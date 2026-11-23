@@ -1,6 +1,6 @@
 # PLANO.md — Roadmap & Tarefas do RPG Skeleton Dungeon
 
-> **Atualizado:** 2026-11-20 | **Status atual:** Fase 1 (Combate) ✅ + Interações Dungeon ✅ | Próximo: Fase 2 — Sprites & Visual
+> **Atualizado:** 2026-11-23 | **Status atual:** Fase 1 (Combate) ✅ + Interações Dungeon ✅ + Fase 2 (Sprites & Visual) ✅
 
 ---
 
@@ -70,10 +70,10 @@
 |----|--------|------------|------------|--------------|--------|
 | S01 | Spritesheet do esqueleto (idle, walk, attack, hit, death) | 🔴 Alta | 4h | — | ✅ (estrutura + placeholder) |
 | S02 | Spritesheets inimigos (zumbi, esqueleto, fantasma, morcego) | 🟡 Média | 4h | S01 | ✅ (estrutura + placeholder) |
-| S03 | Tileset masmorra (parede, chão, porta, escada, decalques) | 🟡 Média | 3h | S01 | ⏳ |
+| S03 | Tileset masmorra (parede, chão, porta, escada, decalques) | 🟡 Média | 3h | S01 | ✅ (tiles procedurais) |
 | S04 | Sistema de animação no Sprite component (frames, loop, speed) | 🔴 Alta | 2h | S01 | ✅ |
 | S05 | Substituir neon debug por sprites reais | 🔴 Alta | 1h | S01, S04 | ✅ (factories usam spritesheet, fallback neon) |
-| S06 | Partículas simples (sangue, poeira, hit spark) | 🟢 Baixa | 2h | S04 | ⏳ |
+| S06 | Partículas simples (sangue, poeira, hit spark) | 🟢 Baixa | 2h | S04 | ✅ |
 
 ---
 

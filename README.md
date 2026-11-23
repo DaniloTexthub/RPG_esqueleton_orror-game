@@ -55,6 +55,13 @@ Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), c
 - **Escadas funcionando** — pisar em `>` desce, `<` sobe andar
 - **Porta interativa com E** — abre/fecha porta adjacente na direção que o player está virado
 
+### Fase 2 — Sprites & Visual (CONCLUÍDA)
+- Estrutura de spritesheet e animações nomeadas mantida com fallback visual
+- Spritesheets carregadas com cache lazy load e sem requisições repetidas após falha
+- Tiles procedurais para chão, parede, porta e escada
+- Animações centralizadas no `AnimationSystem`, sem atualização duplicada no render
+- Partículas simples de impacto e poeira ligadas aos eventos de combate/movimento
+
 ---
 
 ### Bugs Encontrados & Corrigidos

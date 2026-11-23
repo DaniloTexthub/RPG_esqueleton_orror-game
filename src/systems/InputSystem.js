@@ -31,12 +31,6 @@ export class InputSystem extends System {
     this.engine.input.keys.add(code);
     this.engine.input.justPressed.add(code);
 
-    // DEBUG: só loga teclas de direção
-    const dirKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-    if (dirKeys.includes(code)) {
-      console.log(`⌨️ KeyDown: ${code}`);
-    }
-
     // Previne scroll com setas/espaço
     if ([KEYS.SPACE, KEYS.ARROW_UP, KEYS.ARROW_DOWN, KEYS.ARROW_LEFT, KEYS.ARROW_RIGHT].includes(code)) {
       e.preventDefault();
@@ -45,8 +39,6 @@ export class InputSystem extends System {
 
   // Consome input e guarda última direção pressionada (chamado no update da scene)
   update(dt, entities, game) {
-    console.log(`🎮 InputSystem.update CHAMADO | justPressed: [${[...this.engine.input.justPressed].join(', ')}]`);
-
     // Processa justPressed ANTES que o Engine limpe
     this.lastDirection = null;
     this.lastInteract = false;
@@ -55,7 +47,6 @@ export class InputSystem extends System {
       for (const key of dir.key) {
         if (this.engine.input.justPressed.has(key)) {
           this.lastDirection = { name: dirName, ...dir };
-          console.log(`   ✅ Detectou: ${dirName} via ${key}`);
           break;
         }
       }
@@ -65,11 +56,6 @@ export class InputSystem extends System {
     // Detecta tecla E (interagir)
     if (this.engine.input.justPressed.has(INTERACT_KEY)) {
       this.lastInteract = true;
-      console.log(`   ✅ Detectou: INTERAGIR (E)`);
-    }
-
-    if (this.lastDirection) {
-      console.log(`🎮 InputSystem.update: direção consumida = ${this.lastDirection.name}`);
     }
   }
 
