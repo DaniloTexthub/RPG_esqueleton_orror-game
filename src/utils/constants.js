@@ -1,10 +1,12 @@
 // Constantes globais do jogo — centralizadas para fácil ajuste
 
 export const TILE_SIZE = 32;              // Tamanho do tile em pixels (32x32)
-export const GRID_WIDTH = 25;             // Largura do grid em tiles
-export const GRID_HEIGHT = 18;            // Altura do grid em tiles
-export const CANVAS_WIDTH = TILE_SIZE * GRID_WIDTH;   // 800px
-export const CANVAS_HEIGHT = TILE_SIZE * GRID_HEIGHT; // 576px
+export const GRID_WIDTH = 45;             // Largura do mapa em tiles
+export const GRID_HEIGHT = 33;            // Altura do mapa em tiles
+export const VIEW_WIDTH = 25;             // Largura visível em tiles
+export const VIEW_HEIGHT = 18;            // Altura visível em tiles
+export const CANVAS_WIDTH = TILE_SIZE * VIEW_WIDTH;   // 800px
+export const CANVAS_HEIGHT = TILE_SIZE * VIEW_HEIGHT; // 576px
 
 export const MOVE_DURATION = 120;         // ms para mover 1 tile (lerp)
 export const TURN_DELAY = 150;            // ms entre ações de turno

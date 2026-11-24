@@ -42,8 +42,18 @@ export class CombatScene extends Scene {
 
     // Garante que ambos têm Combatant component
     this.ensureCombatantComponents();
-    this.playerEntity.get(Combatant).entity = this.playerEntity;
-    this.enemyEntity.get(Combatant).entity = this.enemyEntity;
+    const playerCombatant = this.playerEntity.get(Combatant);
+    const enemyCombatant = this.enemyEntity.get(Combatant);
+    if (!playerCombatant || !enemyCombatant) {
+      console.error('CombatScene: Não foi possível criar os combatentes.');
+      this.exitCombat(false);
+      return;
+    }
+    playerCombatant.entity = this.playerEntity;
+    enemyCombatant.entity = this.enemyEntity;
+    this.entities = [];
+    this.addEntity(this.playerEntity);
+    this.addEntity(this.enemyEntity);
 
     // Inicializa UI com renderer
     if (this.engine?.renderer && !this.combatUI) {
@@ -60,6 +70,10 @@ export class CombatScene extends Scene {
 
     // Inicia combate após breve delay para animação
     setTimeout(() => {
+      this.combatUI?.show(playerCombatant, enemyCombatant);
+      this.unsubAction = eventBus.on('combatAction', data => this.onCombatAction(data));
+      this.unsubTurn = eventBus.on('turnStarted', data => this.onTurnStarted(data));
+
       const started = this.combatSystem.startCombat(
         this.playerEntity,
         this.enemyEntity,
@@ -71,19 +85,6 @@ export class CombatScene extends Scene {
         return;
       }
 
-      // Mostra UI
-      const playerCombatant = this.playerEntity.get(Combatant);
-      const enemyCombatant = this.enemyEntity.get(Combatant);
-      this.combatUI?.show(playerCombatant, enemyCombatant);
-
-      // Mensagem de encontro
-      const enemyCombatantData = this.enemyEntity.get(Combatant);
-      this.combatUI?.queueMessage(`⚔️ Um ${enemyCombatantData?.name || 'inimigo'} apareceu!`);
-      this.combatUI?.queueMessage(`▶ Turno de ${playerCombatant.name}`);
-
-      // Escuta eventos do combat system
-      this.unsubAction = eventBus.on('combatAction', (data) => this.onCombatAction(data));
-      this.unsubTurn = eventBus.on('turnStarted', (data) => this.onTurnStarted(data));
     }, 400);
   }
 
@@ -184,6 +185,11 @@ export class CombatScene extends Scene {
   onTurnStarted(data) {
     this.updateCombatantPanels();
     this.combatUI?.queueMessage(`▶ Turno de ${data.combatant.name}`);
+    if (data.isPlayer) {
+      this.combatUI?.backToMainMenu();
+    } else {
+      this.combatUI?.hideMenus();
+    }
   }
 
   // Atualiza painéis de ambos combatentes

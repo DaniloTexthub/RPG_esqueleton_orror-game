@@ -19,10 +19,26 @@ export class CombatSystem extends System {
     this.playerEntity = null;
     this.enemyEntity = null;
     this.onCombatEnd = null;   // Callback (victory, data)
+    this.enemyTurnTimer = null;
+  }
+
+  onRemove() {
+    clearTimeout(this.enemyTurnTimer);
+    this.enemyTurnTimer = null;
+  }
+
+  scheduleEnemyTurn() {
+    clearTimeout(this.enemyTurnTimer);
+    this.enemyTurnTimer = setTimeout(() => {
+      this.enemyTurnTimer = null;
+      this.executeEnemyAI();
+    }, 800);
   }
 
   // Inicia novo combate
   startCombat(playerEntity, enemyEntity, onEndCallback) {
+    clearTimeout(this.enemyTurnTimer);
+    this.enemyTurnTimer = null;
     this.playerEntity = playerEntity;
     this.enemyEntity = enemyEntity;
     this.onCombatEnd = onEndCallback;
@@ -57,6 +73,11 @@ export class CombatSystem extends System {
       combatants: this.combatants.map(c => c.combatant),
       firstTurn: this.currentCombatant.combatant
     });
+    eventBus.emit('turnStarted', {
+      combatant: this.currentCombatant.combatant,
+      isPlayer: this.currentCombatant.combatant.isPlayer
+    });
+    if (!this.currentCombatant.combatant.isPlayer) this.scheduleEnemyTurn();
 
     return true;
   }
@@ -85,7 +106,7 @@ export class CombatSystem extends System {
 
       // Se é inimigo, executa IA após delay
       if (!this.currentCombatant.combatant.isPlayer) {
-        setTimeout(() => this.executeEnemyAI(), 800);
+        this.scheduleEnemyTurn();
       }
     }
   }
@@ -108,6 +129,8 @@ export class CombatSystem extends System {
 
   // Finaliza combate
   endCombat(victory, extraData = {}) {
+    clearTimeout(this.enemyTurnTimer);
+    this.enemyTurnTimer = null;
     this.turnPhase = 'ended';
 
     const player = this.playerEntity.get(Combatant);
@@ -229,11 +252,13 @@ export class CombatSystem extends System {
       this.log(`🏃 ${player.name} fugiu com sucesso!`);
       eventBus.emit('combatFled', { player, enemy });
       this.endCombat(null, { fled: true }); // null = fugiu
+      return { success: true };
     } else {
       this.log(`❌ ${player.name} não conseguiu fugir!`);
+      eventBus.emit('combatFleeAttempt', { player, enemy, success: false });
       this.nextTurn();
+      return { success: false };
     }
-    return true;
   }
 
   // --- IA do Inimigo ---

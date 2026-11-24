@@ -369,8 +369,21 @@ export class CombatUI {
         this.queueMessage('Não há outros membros no time.');
         break;
       case 'run':
-        this.combatSystem.playerFlee();
+        this.onFleePressed();
         break;
+    }
+  }
+
+  // Tenta fugir e informa o resultado antes de passar o turno
+  onFleePressed() {
+    if (this.combatSystem.turnPhase !== 'playerAction') return;
+    const result = this.combatSystem.playerFlee();
+    if (result?.success === true) {
+      this.queueMessage('Você conseguiu escapar da batalha!');
+      this.hideMenus();
+    } else if (result?.success === false) {
+      this.queueMessage('Não conseguiu fugir! O inimigo prepara um contra-ataque.');
+      this.hideMenus();
     }
   }
 

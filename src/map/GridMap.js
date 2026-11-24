@@ -3,7 +3,20 @@
 
 import { GRID_WIDTH, GRID_HEIGHT, TILE_TYPE } from '../utils/constants.js';
 import { inBounds } from '../utils/math.js';
-import { isWalkable, getTileDef, TILE_DEFINITIONS } from './TileType.js';
+import { isWalkable, getTileDef } from './TileType.js';
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function shuffled(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = randomInt(0, i);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 
 export class GridMap {
   constructor(width = GRID_WIDTH, height = GRID_HEIGHT, data = null) {
@@ -76,7 +89,21 @@ export class GridMap {
   getInteractable(x, y) {
     const key = `${x},${y}`;
     const feature = this.features.get(key);
-    if (feature && feature.interactable) return feature;
+    if (feature?.interactable) {
+      if (feature.type === 'door') {
+        return {
+          ...feature,
+          action: feature.state === 'closed' ? 'open' : 'close'
+        };
+      }
+      if (feature.type === 'stairs_down') {
+        return { ...feature, action: 'descend' };
+      }
+      if (feature.type === 'stairs_up') {
+        return { ...feature, action: 'ascend' };
+      }
+      return feature;
+    }
 
     const tileType = this.get(x, y);
     if (getTileDef(tileType).interactable) {
@@ -130,72 +157,148 @@ export class GridMap {
     return map;
   }
 
-  // Gera mapa simples para teste (rooms + corridors)
-  static generateTestMap(width = GRID_WIDTH, height = GRID_HEIGHT) {
+  // Gera salas em setores e liga todas por uma árvore de corredores
+  static generateDungeon(width = GRID_WIDTH, height = GRID_HEIGHT) {
+    if (width < 31 || height < 20) {
+      throw new RangeError('O mapa precisa ter pelo menos 31x20 tiles.');
+    }
+
     const map = new GridMap(width, height);
     map.fill(TILE_TYPE.WALL);
 
-    // Sala central
-    const cx = Math.floor(width / 2);
-    const cy = Math.floor(height / 2);
-    const roomW = 12, roomH = 8;
+    const columns = 3;
+    const rows = 2;
+    const cellWidth = Math.floor((width - 4) / columns);
+    const cellHeight = Math.floor((height - 4) / rows);
+    const rooms = [];
 
-    for (let y = cy - roomH/2; y < cy + roomH/2; y++) {
-      for (let x = cx - roomW/2; x < cx + roomW/2; x++) {
-        if (inBounds(x, y, width, height)) map.set(x, y, TILE_TYPE.FLOOR);
+    // Cada setor recebe uma sala com tamanho e posição limitados
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < columns; column++) {
+        const left = 2 + column * cellWidth;
+        const top = 2 + row * cellHeight;
+        const right = column === columns - 1 ? width - 2 : left + cellWidth;
+        const bottom = row === rows - 1 ? height - 2 : top + cellHeight;
+        const roomWidth = randomInt(7, Math.min(11, right - left - 2));
+        const roomHeight = randomInt(6, Math.min(10, bottom - top - 2));
+        const x = randomInt(left + 1, right - roomWidth - 1);
+        const y = randomInt(top + 1, bottom - roomHeight - 1);
+        const room = {
+          x, y, width: roomWidth, height: roomHeight,
+          centerX: x + Math.floor(roomWidth / 2),
+          centerY: y + Math.floor(roomHeight / 2)
+        };
+        rooms.push(room);
+
+        for (let tileY = y; tileY < y + roomHeight; tileY++) {
+          for (let tileX = x; tileX < x + roomWidth; tileX++) {
+            map.set(tileX, tileY, TILE_TYPE.FLOOR);
+          }
+        }
       }
     }
 
-    // Corredores nas 4 direções
-    const corridors = [
-      { x: cx, y: 0, dx: 0, dy: 1, len: cy - roomH/2 },      // Norte
-      { x: cx, y: cy + roomH/2, dx: 0, dy: 1, len: height - (cy + roomH/2) }, // Sul
-      { x: 0, y: cy, dx: 1, dy: 0, len: cx - roomW/2 },      // Oeste
-      { x: cx + roomW/2, y: cy, dx: 1, dy: 0, len: width - (cx + roomW/2) }   // Leste
-    ];
+    const carveCorridor = (start, end, horizontalFirst) => {
+      const points = [{ x: start.centerX, y: start.centerY }];
+      let x = start.centerX;
+      let y = start.centerY;
+      const carveTo = (targetX, targetY) => {
+        while (x !== targetX) {
+          x += Math.sign(targetX - x);
+          map.set(x, y, TILE_TYPE.FLOOR);
+          points.push({ x, y });
+        }
+        while (y !== targetY) {
+          y += Math.sign(targetY - y);
+          map.set(x, y, TILE_TYPE.FLOOR);
+          points.push({ x, y });
+        }
+      };
 
-    corridors.forEach(c => {
-      for (let i = 0; i < c.len; i++) {
-        const x = c.x + c.dx * i;
-        const y = c.y + c.dy * i;
-        if (inBounds(x, y, width, height)) map.set(x, y, TILE_TYPE.FLOOR);
+      if (horizontalFirst) {
+        carveTo(end.centerX, start.centerY);
+        carveTo(end.centerX, end.centerY);
+      } else {
+        carveTo(start.centerX, end.centerY);
+        carveTo(end.centerX, end.centerY);
       }
-    });
+      return points;
+    };
 
-    // Salas nas extremidades
-    const rooms = [
-      { x: cx, y: 2 },           // Norte
-      { x: cx, y: height - 3 },  // Sul
-      { x: 2, y: cy },           // Oeste
-      { x: width - 3, y: cy }    // Leste
-    ];
+    // Percorre os setores com DFS aleatória: conexão garantida, traçado variável
+    const connections = [];
+    const visited = new Set([0]);
+    const stack = [0];
+    while (stack.length > 0) {
+      const current = stack[stack.length - 1];
+      const column = current % columns;
+      const row = Math.floor(current / columns);
+      const neighbors = shuffled([
+        column > 0 ? current - 1 : -1,
+        column < columns - 1 ? current + 1 : -1,
+        row > 0 ? current - columns : -1,
+        row < rows - 1 ? current + columns : -1
+      ].filter(index => index >= 0 && !visited.has(index)));
 
-    rooms.forEach(r => {
-      for (let y = r.y - 2; y <= r.y + 2; y++) {
-        for (let x = r.x - 3; x <= r.x + 3; x++) {
-          if (inBounds(x, y, width, height)) map.set(x, y, TILE_TYPE.FLOOR);
+      if (neighbors.length === 0) {
+        stack.pop();
+        continue;
+      }
+
+      const next = neighbors[0];
+      connections.push(carveCorridor(rooms[current], rooms[next], Math.random() < 0.5));
+      visited.add(next);
+      stack.push(next);
+    }
+
+    // Algumas conexões ganham portas, sempre em trechos acessíveis de corredor
+    shuffled(connections)
+      .filter(path => path.length >= 9)
+      .slice(0, 2)
+      .forEach(path => {
+        const door = path[Math.floor(path.length / 2)];
+        map.addFeature(door.x, door.y, { type: 'door', state: 'closed', interactable: true });
+        map.set(door.x, door.y, TILE_TYPE.DOOR_CLOSED);
+      });
+
+    const startRoom = rooms[0];
+    const start = { x: startRoom.centerX, y: startRoom.centerY };
+    const endRoom = rooms.slice(1).sort((a, b) => {
+      const distanceA = Math.abs(a.centerX - start.x) + Math.abs(a.centerY - start.y);
+      const distanceB = Math.abs(b.centerX - start.x) + Math.abs(b.centerY - start.y);
+      return distanceB - distanceA;
+    })[0];
+    const end = { x: endRoom.centerX, y: endRoom.centerY };
+    map.setPlayerSpawn(start.x, start.y);
+    map.addFeature(start.x, start.y, { type: 'stairs_up', interactable: true });
+    map.addFeature(end.x, end.y, { type: 'stairs_down', interactable: true });
+
+    // Spawns ficam dentro das salas, afastados das escadas e uns dos outros
+    const candidates = shuffled(rooms.flatMap(room => {
+      const positions = [];
+      for (let y = room.y + 1; y < room.y + room.height - 1; y++) {
+        for (let x = room.x + 1; x < room.x + room.width - 1; x++) {
+          const key = `${x},${y}`;
+          if (map.get(x, y) === TILE_TYPE.FLOOR && !map.features.has(key)) {
+            positions.push({ x, y });
+          }
         }
       }
-    });
+      return positions;
+    }));
 
-    // Porta no centro (sul da sala central)
-    map.addFeature(cx, cy + roomH/2, { type: 'door', state: 'closed', interactable: true });
-
-    // Escada baixo (sala sul)
-    map.addFeature(cx, height - 3, { type: 'stairs_down', interactable: true });
-
-    // Escada cima (sala norte) - para andar anterior
-    map.addFeature(cx, 2, { type: 'stairs_up', interactable: true });
-
-    // Spawn player (sala central)
-    map.setPlayerSpawn(cx, cy);
-
-    // Enemy spawns
-    map.enemySpawns.push({ x: cx - 2, y: cy - 1 });
-    map.enemySpawns.push({ x: cx + 2, y: cy + 1 });
-    map.enemySpawns.push({ x: 2, y: cy });
-    map.enemySpawns.push({ x: width - 3, y: cy });
+    const spawnDistance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    for (const candidate of candidates) {
+      if (map.enemySpawns.length >= 8) break;
+      if (spawnDistance(candidate, start) < 4 || spawnDistance(candidate, end) < 3) continue;
+      if (map.enemySpawns.some(spawn => spawnDistance(candidate, spawn) < 4)) continue;
+      map.enemySpawns.push(candidate);
+    }
 
     return map;
+  }
+
+  static generateTestMap(width = GRID_WIDTH, height = GRID_HEIGHT) {
+    return GridMap.generateDungeon(width, height);
   }
 }

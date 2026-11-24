@@ -81,6 +81,7 @@ export function createEnemy(x, y, typeId = 1) {
     // Fallback cor do tipo (enquanto não tem spritesheet)
     color: type.color,
     accentColor: type.accentColor,
+    enemyType: type.spriteId,
     // Animações padrão de inimigos
     animations: Sprite.createEnemyAnimations(),
     currentAnimation: 'idle'
@@ -106,7 +107,8 @@ export function createEnemy(x, y, typeId = 1) {
     attack: type.attack,
     defense: type.defense,
     speed: type.speed,
-    xp: type.xp
+    xp: type.xp,
+    spriteId: type.spriteId
   };
 
   entity.addTag('enemy');

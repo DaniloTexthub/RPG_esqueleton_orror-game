@@ -33,8 +33,8 @@ export class DungeonScene extends Scene {
   init(game) {
     super.init(game);
 
-    // Cria mapa (teste procedural)
-    this.gridMap = GridMap.generateTestMap();
+    // Cria um mapa procedural conectado
+    this.gridMap = GridMap.generateDungeon();
     this.floor = 1;
 
     // Adiciona systems à CENA (essencial!)
@@ -173,8 +173,9 @@ export class DungeonScene extends Scene {
 
   // Spawn inimigos nos pontos definidos
   spawnEnemies() {
-    this.gridMap.enemySpawns.forEach((spawn, i) => {
-      const enemy = createEnemy(spawn.x, spawn.y, i + 1);
+    this.gridMap.enemySpawns.forEach(spawn => {
+      const enemyType = Math.floor(Math.random() * 4) + 1;
+      const enemy = createEnemy(spawn.x, spawn.y, enemyType);
       this.addEntity(enemy);
       enemy.addTag('enemy');
     });
@@ -187,7 +188,7 @@ export class DungeonScene extends Scene {
     this.player = this.getFirstByTag('player');
 
     // Gera novo mapa
-    this.gridMap = GridMap.generateTestMap();
+    this.gridMap = GridMap.generateDungeon();
 
     // Reposiciona player na entrada (escada cima) ou spawn padrão
     const pos = this.player.get(Position);
@@ -223,8 +224,7 @@ export class DungeonScene extends Scene {
     if (entity.hasTag('player')) {
       const feature = this.gridMap.getInteractable(x, y);
       if (feature?.type === 'stairs_down' || feature?.type === 'stairs_up') {
-        // Auto-trigger ao pisar
-        this.engine.eventBus.emit('changeFloor', {
+        eventBus.emit('changeFloor', {
           direction: feature.type === 'stairs_down' ? 'down' : 'up'
         });
       }

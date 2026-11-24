@@ -12,6 +12,7 @@ export class InputSystem extends System {
     this.requiredComponents = []; // Não opera sobre entities
     this.boundKeyDown = this.onKeyDown.bind(this);
     this.boundKeyUp = this.onKeyUp.bind(this);
+    this.facing = { x: 0, y: 1, name: 'DOWN' };
   }
 
   onAdd(game) {
@@ -47,6 +48,7 @@ export class InputSystem extends System {
       for (const key of dir.key) {
         if (this.engine.input.justPressed.has(key)) {
           this.lastDirection = { name: dirName, ...dir };
+          this.facing = { name: dirName, ...dir };
           break;
         }
       }

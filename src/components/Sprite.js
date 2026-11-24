@@ -13,6 +13,7 @@ export class Sprite extends Component {
     // Cor sólida (fallback/debug)
     this.color = config.color || COLORS.PLAYER;
     this.accentColor = config.accentColor || COLORS.PLAYER_ACCENT;
+    this.enemyType = config.enemyType || null;
 
     // Imagem única
     this.image = config.image || null; // HTMLImageElement

@@ -62,6 +62,12 @@ Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), c
 - Animações centralizadas no `AnimationSystem`, sem atualização duplicada no render
 - Partículas simples de impacto e poeira ligadas aos eventos de combate/movimento
 
+### Masmorras procedurais
+- Mapas de 45×33 tiles com câmera mantendo a área visível original de 25×18
+- Seis salas aleatórias em setores conectados por corredores; escadas em salas separadas
+- Inimigos surgem dentro das salas, afastados da entrada e uns dos outros
+- Fantasmas têm desenho translúcido próprio quando o spritesheet não está disponível
+
 ---
 
 ### Bugs Encontrados & Corrigidos

@@ -18,6 +18,7 @@ export class CanvasRenderer {
     // Cache de imagens carregadas
     this.imageCache = new Map();
     this.loadingImages = new Set();
+    this.failedImages = new Set();
     this.particles = [];
 
     // Efeitos visuais curtos: sangue, poeira e impacto
@@ -54,6 +55,7 @@ export class CanvasRenderer {
   // Carrega imagem (com cache)
   async loadImage(src) {
     if (this.imageCache.has(src)) return this.imageCache.get(src);
+    if (this.failedImages.has(src)) return null;
     if (this.loadingImages.has(src)) return null;
     this.loadingImages.add(src);
 
@@ -66,6 +68,7 @@ export class CanvasRenderer {
       };
       img.onerror = () => {
         this.loadingImages.delete(src);
+        this.failedImages.add(src);
         reject(new Error(`Falha ao carregar imagem: ${src}`));
       };
       img.src = src;
@@ -237,12 +240,12 @@ export class CanvasRenderer {
     if (sprite.sheetSrc && !sprite.sheet) {
       this.loadImage(sprite.sheetSrc).then(img => {
         if (img) sprite.sheet = img;
-      }).catch(() => {});
+      }).catch(error => console.warn(error.message));
     }
     if (sprite.imageSrc && !sprite.image) {
       this.loadImage(sprite.imageSrc).then(img => {
         if (img) sprite.image = img;
-      }).catch(() => {});
+      }).catch(error => console.warn(error.message));
     }
 
     // Posição interpolada
@@ -311,11 +314,38 @@ export class CanvasRenderer {
   drawDefaultSprite(sprite, entity) {
     const isPlayer = entity.hasTag('player');
     const half = this.tileSize / 2;
+    if (sprite.enemyType === 'ghost') {
+      this.drawGhostSprite();
+      return;
+    }
+
     this.ctx.fillStyle = sprite.color || (isPlayer ? COLORS.PLAYER : COLORS.ENEMY);
     this.ctx.fillRect(-half + 5, -half + 4, this.tileSize - 10, this.tileSize - 8);
     this.ctx.fillStyle = sprite.accentColor || (isPlayer ? COLORS.PLAYER_ACCENT : COLORS.ENEMY_ACCENT);
     this.ctx.fillRect(-half + 8, -half + 7, 4, 4);
     this.ctx.fillRect(half - 12, -half + 7, 4, 4);
+  }
+
+  // Fallback translúcido para o fantasma quando o spritesheet não existe
+  drawGhostSprite() {
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.78;
+    this.ctx.fillStyle = '#b9c5ff';
+    this.ctx.shadowColor = '#899cff';
+    this.ctx.shadowBlur = 8;
+    this.ctx.beginPath();
+    this.ctx.ellipse(0, -2, 10, 12, 0, Math.PI, 0);
+    this.ctx.lineTo(10, 8);
+    this.ctx.quadraticCurveTo(6, 5, 3, 10);
+    this.ctx.quadraticCurveTo(0, 6, -3, 10);
+    this.ctx.quadraticCurveTo(-6, 5, -10, 8);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.shadowBlur = 0;
+    this.ctx.fillStyle = '#252b52';
+    this.ctx.fillRect(-5, -4, 3, 4);
+    this.ctx.fillRect(2, -4, 3, 4);
+    this.ctx.restore();
   }
 
   // Skeleton avançado (partes separadas - futuro)

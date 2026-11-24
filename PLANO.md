@@ -93,7 +93,7 @@
 
 | ID | Tarefa | Prioridade | Estimativa | Dependências |
 |----|--------|------------|------------|------------|
-| G01 | BSP/Dungeon generator melhor (rooms + corridors garantidos) | 🟡 Média | 3h | F05 |
+| G01 | Geração procedural estruturada (salas e corredores conectados) | 🟡 Média | 3h | F05 | ✅ |
 | G02 | Chaves/portas coloridas, salas secretas, armadilhas | 🟡 Média | 2h | G01 |
 | G03 | Loot tables por andar/inimigo + raridade | 🟢 Baixa | 2h | P05 |
 | G04 | Boss por cada 5 andares (mecânica única) | 🟢 Baixa | 4h | C06, G01 |

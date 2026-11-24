@@ -62,16 +62,10 @@ export class MovementSystem extends System {
   // Colisão com tiles do mapa
   checkMapCollision(x, y, collider) {
     if (!collider || !collider.solid) return true; // Ghost mode
+    if (!this.gridMap) return false;
 
-    if (!this.gridMap) {
-      console.warn('⚠️ checkMapCollision: gridMap é undefined!');
-      return false;
-    }
-
-    // Verifica tile principal
-    const tileType = this.gridMap.get(x, y);
-    const walkable = isWalkable(tileType);
-    if (!walkable) return false;
+    // Verifica tile e estado da feature na mesma posição
+    if (!this.gridMap.isWalkable(x, y)) return false;
 
     // Se entity > 1 tile, verifica todos
     if (collider.width > 1 || collider.height > 1) {
@@ -171,14 +165,8 @@ export class MovementSystem extends System {
     const pos = entity.get(Position);
     if (!pos) return;
 
-    // Verifica feature interativa (porta, escada, armadilha)
-    const interactable = this.gridMap.getInteractable(pos.x, pos.y);
-    if (interactable) {
-      this.handleInteraction(entity, interactable, pos.x, pos.y);
-    }
-
     // Evento para outros systems (combate, etc)
-    this.engine?.eventBus.emit('entityMoved', { entity, x: pos.x, y: pos.y });
+    eventBus.emit('entityMoved', { entity, x: pos.x, y: pos.y });
   }
 
   handleInteraction(entity, interactable, x, y) {
@@ -193,10 +181,10 @@ export class MovementSystem extends System {
         this.closeDoor(x, y);
         break;
       case 'descend':
-        this.engine.eventBus.emit('changeFloor', { direction: 'down' });
+        eventBus.emit('changeFloor', { direction: 'down' });
         break;
       case 'ascend':
-        this.engine.eventBus.emit('changeFloor', { direction: 'up' });
+        eventBus.emit('changeFloor', { direction: 'up' });
         break;
     }
   }
@@ -213,11 +201,11 @@ export class MovementSystem extends System {
       return;
     }
 
-    // 2. Tenta porta adjacente (olha na direção que o player está virado)
+    // 2. Olha na direção persistente do player
     const inputSystem = this.engine.getSystem?.('InputSystem');
-    const lastDir = inputSystem?.lastDirection || { x: 0, y: 1 }; // default baixo
-    const adjX = pos.x + lastDir.x;
-    const adjY = pos.y + lastDir.y;
+    const facing = inputSystem?.facing || { x: 0, y: 1 };
+    const adjX = pos.x + facing.x;
+    const adjY = pos.y + facing.y;
 
     interactable = this.gridMap.getInteractable(adjX, adjY);
     if (interactable && (interactable.action === 'open' || interactable.action === 'close')) {
@@ -232,7 +220,7 @@ export class MovementSystem extends System {
     if (feature && feature.type === 'door') {
       feature.state = 'open';
       this.gridMap.set(x, y, TILE_TYPE.DOOR_OPEN);
-      this.engine.eventBus.emit('doorOpened', { x, y });
+      eventBus.emit('doorOpened', { x, y });
     }
   }
 
@@ -242,7 +230,7 @@ export class MovementSystem extends System {
     if (feature && feature.type === 'door') {
       feature.state = 'closed';
       this.gridMap.set(x, y, TILE_TYPE.DOOR_CLOSED);
-      this.engine.eventBus.emit('doorClosed', { x, y });
+      eventBus.emit('doorClosed', { x, y });
     }
   }
 
