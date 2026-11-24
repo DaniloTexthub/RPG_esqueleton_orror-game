@@ -59,10 +59,27 @@ const ENEMY_TYPES = {
   }
 };
 
-export function createEnemy(x, y, typeId = 1) {
+export function createEnemy(x, y, typeId = 1, options = {}) {
   // Seleciona tipo baseado no ID (cicla)
   const types = Object.values(ENEMY_TYPES);
   const type = types[(typeId - 1) % types.length];
+  const isBoss = options.isBoss === true;
+  const floor = Math.max(1, Math.floor(options.floor || 1));
+  const bossTier = Math.max(1, Math.floor(floor / 5));
+  const scale = isBoss ? 2 + (bossTier - 1) * 0.5 : 1;
+  const enemyData = {
+    name: isBoss ? `Tirano ${type.name}` : type.name,
+    maxHP: Math.floor(type.maxHP * scale),
+    hp: Math.floor(type.maxHP * scale),
+    attack: isBoss ? type.attack + floor : type.attack,
+    defense: isBoss ? type.defense + bossTier : type.defense,
+    speed: type.speed,
+    xp: isBoss ? type.xp * 3 + floor * 2 : type.xp,
+    spriteId: type.spriteId,
+    typeId,
+    isBoss,
+    bossEnraged: false
+  };
 
   const entity = new Entity();
 
@@ -100,16 +117,7 @@ export function createEnemy(x, y, typeId = 1) {
 
   // Dados do inimigo (armazenados no collider para simplicidade agora)
   const collider = entity.get('Collider');
-  collider.enemyData = {
-    name: type.name,
-    maxHP: type.maxHP,
-    hp: type.maxHP,
-    attack: type.attack,
-    defense: type.defense,
-    speed: type.speed,
-    xp: type.xp,
-    spriteId: type.spriteId
-  };
+  collider.enemyData = enemyData;
 
   entity.addTag('enemy');
 

@@ -17,6 +17,7 @@ export class CombatScene extends Scene {
     this.playerEntity = null;
     this.enemyEntity = null;
     this.returnData = null; // Dados para voltar ao dungeon
+    this.lootDrops = [];
   }
 
   init(game) {
@@ -30,6 +31,7 @@ export class CombatScene extends Scene {
   }
 
   onEnter(data = {}) {
+    this.lootDrops = [];
     this.playerEntity = data.playerEntity;
     this.enemyEntity = data.enemyEntity;
     this.returnData = data.returnData || {};
@@ -73,6 +75,8 @@ export class CombatScene extends Scene {
       this.combatUI?.show(playerCombatant, enemyCombatant);
       this.unsubAction = eventBus.on('combatAction', data => this.onCombatAction(data));
       this.unsubTurn = eventBus.on('turnStarted', data => this.onTurnStarted(data));
+      this.unsubLoot = eventBus.on('lootDropped', data => this.onLootDropped(data));
+      this.unsubBoss = eventBus.on('bossEnraged', data => this.onBossEnraged(data));
 
       const started = this.combatSystem.startCombat(
         this.playerEntity,
@@ -92,6 +96,8 @@ export class CombatScene extends Scene {
     super.onExit();
     this.unsubAction?.();
     this.unsubTurn?.();
+    this.unsubLoot?.();
+    this.unsubBoss?.();
     this.combatUI?.hide();
     this.combatUI?.destroy();
     this.combatUI = null;
@@ -114,7 +120,9 @@ export class CombatScene extends Scene {
           ap: playerTag.ap,
           xp: playerTag.xp,
           xpToNext: playerTag.xpToNext,
-          level: playerTag.level
+          level: playerTag.level,
+          skillPoints: playerTag.skillPoints,
+          unlockedSkills: playerTag.unlockedSkills
         });
         combatant.entity = this.playerEntity;
         this.playerEntity.add(combatant);
@@ -148,6 +156,8 @@ export class CombatScene extends Scene {
       playerTag.xp = combatant.xp;
       playerTag.xpToNext = combatant.xpToNext;
       playerTag.level = combatant.level;
+      playerTag.skillPoints = combatant.skillPoints;
+      playerTag.unlockedSkills = [...combatant.unlockedSkills];
     }
   }
 
@@ -161,7 +171,7 @@ export class CombatScene extends Scene {
     }
 
     // Animação de dano
-    if (data.action === 'attack' && data.target) {
+    if (['attack', 'boss_attack'].includes(data.action) && data.target) {
       const targetPos = data.target.entity?.get('Position');
       if (targetPos) {
         this.combatUI?.showDamageNumber(
@@ -170,7 +180,7 @@ export class CombatScene extends Scene {
         );
       }
       this.combatUI?.triggerAttackAnimation(isPlayer);
-      this.combatUI?.shake(6, 200);
+      this.combatUI?.shake(data.action === 'boss_attack' ? 12 : 6, 200);
     }
 
     // Defesa
@@ -180,6 +190,16 @@ export class CombatScene extends Scene {
 
     // Atualiza painéis de HP/AP
     this.updateCombatantPanels();
+  }
+
+  onLootDropped(drop) {
+    this.lootDrops.push(drop);
+    this.combatUI?.queueMessage(`Obteve: ${drop.itemName} (${drop.rarity}).`);
+  }
+
+  onBossEnraged({ enemy }) {
+    this.combatUI?.queueMessage(`${enemy.name} ficou enfurecido!`);
+    this.combatUI?.shake(10, 250);
   }
 
   onTurnStarted(data) {
@@ -203,6 +223,7 @@ export class CombatScene extends Scene {
 
   // Fim do combate
   async onCombatEnd(victory, combatData) {
+    combatData.lootDrops = [...this.lootDrops];
     // Toca animação de vitória/derrota na UI
     await this.combatUI?.onCombatEnd(victory, combatData);
 
@@ -225,6 +246,18 @@ export class CombatScene extends Scene {
     // Sincroniza stats de volta ao PlayerTag
     const combatant = this.playerEntity.get(Combatant);
     if (combatant) this.syncPlayerTag(combatant);
+    const enemyCombatant = this.enemyEntity.get(Combatant);
+    const enemyData = this.enemyEntity.get('Collider')?.enemyData;
+    if (enemyCombatant && enemyData) {
+      Object.assign(enemyData, {
+        hp: enemyCombatant.hp,
+        maxHP: enemyCombatant.maxHP,
+        attack: enemyCombatant.attack,
+        defense: enemyCombatant.defense,
+        speed: enemyCombatant.speed,
+        bossEnraged: enemyCombatant.bossEnraged
+      });
+    }
 
     // Volta para DungeonScene
     this.engine.changeScene('dungeon', returnData);

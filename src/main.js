@@ -8,6 +8,7 @@ import { CombatScene } from './scenes/CombatScene.js';
 import { MenuScene } from './scenes/MenuScene.js';
 import { eventBus } from './core/EventBus.js';
 import { GAME_STATE } from './utils/constants.js';
+import { SaveSystem } from './systems/SaveSystem.js';
 
 // ============ INICIALIZAÇÃO ============
 
@@ -20,9 +21,10 @@ renderer.init(engine.canvas);
 engine.setRenderer(renderer);
 
 // 3. Cenas
-const dungeonScene = new DungeonScene();
+const saveSystem = new SaveSystem();
+const dungeonScene = new DungeonScene(saveSystem);
 const combatScene = new CombatScene();
-const menuScene = new MenuScene();
+const menuScene = new MenuScene(saveSystem);
 engine.addScene('dungeon', dungeonScene);
 engine.addScene('combat', combatScene);
 engine.addScene('menu', menuScene);
@@ -55,11 +57,9 @@ eventBus.on('doorOpened', ({ x, y }) => {
 });
 
 // Menu start game event
-eventBus.on('menuStartGame', ({ characterId, floor }) => {
-  console.log(`🎮 Iniciando jogo: ${characterId} no andar ${floor}`);
-  // Prepara dados para DungeonScene
-  const startData = { characterId, floor, isNewGame: floor === 1 };
-  engine.changeScene('dungeon', startData);
+eventBus.on('menuStartGame', data => {
+  console.log(`🎮 Iniciando jogo: ${data.characterId || data.savedGame?.characterId} no andar ${data.floor || data.savedGame?.floor || 1}`);
+  engine.changeScene('dungeon', data);
 });
 
 // Debug keys

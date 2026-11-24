@@ -10,12 +10,14 @@ import { MOVE_DURATION, TILE_TYPE, DIRS, KEYS } from '../utils/constants.js';
 import { isWalkable, getTileDef } from '../map/TileType.js';
 import { eventBus } from '../core/EventBus.js';
 import { INTERACT_KEY } from './InputSystem.js';
+import { InventorySystem } from './InventorySystem.js';
 
 export class MovementSystem extends System {
   constructor() {
     super(200); // Depois do InputSystem
     this.requiredComponents = ['Position', 'Velocity'];
     this.pendingMoves = new Map(); // entityId -> { targetX, targetY, resolve }
+    this.inventorySystem = new InventorySystem();
   }
 
   onAdd(game) {
@@ -128,6 +130,12 @@ export class MovementSystem extends System {
   update(dt, entities, game) {
     const inputSystem = this.engine.getSystem?.('InputSystem');
     if (!inputSystem) return;
+    if (this.engine.currentScene.inventoryUI?.visible ||
+        this.engine.currentScene.merchantUI?.visible) {
+      inputSystem.lastDirection = null;
+      inputSystem.consumeInteract?.();
+      return;
+    }
 
     // 1. Verifica input para iniciar movimento (apenas player)
     if (inputSystem.lastDirection) {
@@ -174,11 +182,37 @@ export class MovementSystem extends System {
     if (!playerTag) return; // Só player interage por enquanto
 
     switch (interactable.action) {
-      case 'open':
-        this.openDoor(x, y);
+      case 'open': {
+        const keyId = interactable.keyColor ? `key_${interactable.keyColor}` : 'dungeon_key';
+        if (interactable.locked && !this.inventorySystem.consumeItem(entity, keyId)) {
+          eventBus.emit('doorLocked', { x, y, keyColor: interactable.keyColor });
+          break;
+        }
+        if (interactable.type === 'secret_door') this.openSecretDoor(x, y);
+        else this.openDoor(x, y);
         break;
+      }
       case 'close':
         this.closeDoor(x, y);
+        break;
+      case 'reveal':
+        this.openSecretDoor(x, y);
+        break;
+      case 'pickup':
+        eventBus.emit('itemPickedUp', {
+          entity,
+          x,
+          y,
+          itemId: interactable.itemId
+        });
+        break;
+      case 'event':
+        eventBus.emit('dungeonEventInteract', {
+          entity,
+          x,
+          y,
+          feature: interactable
+        });
         break;
       case 'descend':
         eventBus.emit('changeFloor', { direction: 'down' });
@@ -208,7 +242,7 @@ export class MovementSystem extends System {
     const adjY = pos.y + facing.y;
 
     interactable = this.gridMap.getInteractable(adjX, adjY);
-    if (interactable && (interactable.action === 'open' || interactable.action === 'close')) {
+    if (interactable && ['open', 'close', 'reveal', 'pickup', 'event'].includes(interactable.action)) {
       this.handleInteraction(entity, interactable, adjX, adjY);
       return;
     }
@@ -219,15 +253,24 @@ export class MovementSystem extends System {
     const feature = this.gridMap.features.get(key);
     if (feature && feature.type === 'door') {
       feature.state = 'open';
+      feature.locked = false;
       this.gridMap.set(x, y, TILE_TYPE.DOOR_OPEN);
       eventBus.emit('doorOpened', { x, y });
     }
   }
 
+  openSecretDoor(x, y) {
+    const feature = this.gridMap.features.get(`${x},${y}`);
+    if (feature?.type !== 'secret_door') return;
+    feature.state = 'open';
+    this.gridMap.set(x, y, TILE_TYPE.DOOR_OPEN);
+    eventBus.emit('secretFound', { x, y });
+  }
+
   closeDoor(x, y) {
     const key = `${x},${y}`;
     const feature = this.gridMap.features.get(key);
-    if (feature && feature.type === 'door') {
+    if (feature && ['door', 'secret_door'].includes(feature.type)) {
       feature.state = 'closed';
       this.gridMap.set(x, y, TILE_TYPE.DOOR_CLOSED);
       eventBus.emit('doorClosed', { x, y });

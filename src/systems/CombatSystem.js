@@ -4,6 +4,7 @@
 import { System } from '../core/System.js';
 import { Combatant } from '../components/Combatant.js';
 import { eventBus } from '../core/EventBus.js';
+import { InventorySystem } from './InventorySystem.js';
 
 export class CombatSystem extends System {
   constructor() {
@@ -20,6 +21,7 @@ export class CombatSystem extends System {
     this.enemyEntity = null;
     this.onCombatEnd = null;   // Callback (victory, data)
     this.enemyTurnTimer = null;
+    this.inventorySystem = new InventorySystem();
   }
 
   onRemove() {
@@ -136,12 +138,17 @@ export class CombatSystem extends System {
     const player = this.playerEntity.get(Combatant);
     const enemy = this.enemyEntity.get(Combatant);
     const fled = extraData.fled === true;
+    let leveledUp = false;
+    const goldGained = victory ? Math.floor(enemy.xp * 0.5) : 0;
 
     if (victory) {
       this.log(`🏆 Vitória! ${enemy.name} derrotado!`);
-      player.gainXP(enemy.xp);
+      leveledUp = player.gainXP(enemy.xp);
+      const playerTag = this.playerEntity.get('PlayerTag');
+      if (playerTag) playerTag.gold += goldGained;
       this.log(`+${enemy.xp} XP`);
-      if (player.level > 1) { // Se levelou up agora
+      if (goldGained > 0) this.log(`+${goldGained} ouro`);
+      if (leveledUp) {
         this.log(`⬆ Level Up! Nível ${player.level}`);
       }
     } else if (fled) {
@@ -156,8 +163,8 @@ export class CombatSystem extends System {
       player,
       enemy,
       xpGained: victory ? enemy.xp : 0,
-      goldGained: victory ? Math.floor(enemy.xp * 0.5) : 0,
-      leveledUp: victory && player.level > 1
+      goldGained,
+      leveledUp
     });
 
     // Marca inimigo como morto para remoção (se vitória)
@@ -172,9 +179,9 @@ export class CombatSystem extends System {
         player,
         enemy,
         xpGained: victory ? enemy.xp : 0,
-        goldGained: victory ? Math.floor(enemy.xp * 0.5) : 0,
+        goldGained,
         fled,
-        leveledUp: victory && player.level > 1
+        leveledUp
       }), 1500);
     }
   }
@@ -226,16 +233,34 @@ export class CombatSystem extends System {
     return true;
   }
 
-  // Usar item (placeholder - integra com inventário depois)
+  // Usa um consumível do inventário durante o turno do jogador
   playerUseItem(itemIndex) {
     if (this.turnPhase !== 'playerAction') return false;
     const player = this.playerEntity.get(Combatant);
-    if (!player.useAP(2)) return false;
+    if (player.ap < 1) return false;
+    const result = this.inventorySystem.useItem(this.playerEntity, itemIndex);
+    if (!result.success) {
+      this.log(result.message);
+      return false;
+    }
 
-    // TODO: Integrar com sistema de inventário
-    this.log(`🧪 ${player.name} usa item... (TODO: inventário)`);
+    player.useAP(1);
+    this.log(result.message);
+    eventBus.emit('combatAction', {
+      actor: player,
+      target: player,
+      action: 'item',
+      message: result.message
+    });
     this.nextTurn();
     return true;
+  }
+
+  getUsableItems() {
+    const playerTag = this.playerEntity?.get('PlayerTag');
+    return playerTag?.inventory
+      .map((item, index) => ({ ...item, index, definition: this.inventorySystem.getDefinition(item.id) }))
+      .filter(item => item.definition?.type === 'consumable') || [];
   }
 
   // Fugir (chance baseada em speed)
@@ -268,7 +293,17 @@ export class CombatSystem extends System {
     const enemy = this.enemyEntity.get(Combatant);
     const player = this.playerEntity.get(Combatant);
 
-    // IA simples: ataca se tem AP, senão defende
+    if (enemy.isBoss && !enemy.bossEnraged && enemy.hp <= enemy.maxHP / 2) {
+      enemy.bossEnraged = true;
+      enemy.attack = Math.ceil(enemy.attack * 1.25);
+      eventBus.emit('bossEnraged', { enemy });
+    }
+
+    if (enemy.isBoss && enemy.ap >= 3) {
+      this.enemyBossSlam();
+      return;
+    }
+
     if (enemy.ap >= 2) {
       this.enemyAttack();
     } else if (enemy.ap >= 1) {
@@ -276,6 +311,31 @@ export class CombatSystem extends System {
     } else {
       this.nextTurn();
     }
+  }
+
+  enemyBossSlam() {
+    const enemy = this.enemyEntity.get(Combatant);
+    const player = this.playerEntity.get(Combatant);
+    if (!enemy.useAP(3)) {
+      this.nextTurn();
+      return;
+    }
+
+    const damage = Math.ceil(enemy.attack * 1.5);
+    const result = player.takeDamage(damage, enemy);
+    const message = `${enemy.name} desfere um golpe devastador!`;
+    this.log(`${message} ${player.name} recebe ${result.damage} de dano.`);
+    eventBus.emit('combatAction', {
+      actor: enemy,
+      target: player,
+      action: 'boss_attack',
+      damage: result.damage,
+      killed: result.killed,
+      message
+    });
+
+    if (result.killed) this.checkCombatEnd();
+    else this.nextTurn();
   }
 
   enemyAttack() {

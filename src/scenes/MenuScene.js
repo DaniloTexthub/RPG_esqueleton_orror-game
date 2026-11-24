@@ -4,13 +4,16 @@
 import { Scene } from '../core/Scene.js';
 import { eventBus } from '../core/EventBus.js';
 import { CHARACTER_CLASSES, getAvailableClasses } from '../data/characters.js';
-import { GAME_STATE } from '../utils/constants.js';
+import { SAVE_SLOTS, SaveSystem } from '../systems/SaveSystem.js';
 
 export class MenuScene extends Scene {
-  constructor() {
+  constructor(saveSystem = new SaveSystem()) {
     super('MenuScene');
-    this.currentScreen = 'main'; // 'main' | 'characterSelect' | 'customization' | 'settings'
+    this.saveSystem = saveSystem;
+    this.currentScreen = 'main';
     this.selectedCharacterId = 'skeleton_warrior';
+    this.selectedSaveSlot = SAVE_SLOTS[0];
+    this.returnScreen = 'main';
     this.menuIndex = 0;
     this.charSelectIndex = 0;
     this.customizeIndex = 0;
@@ -26,6 +29,13 @@ export class MenuScene extends Scene {
   }
 
   onEnter() {
+    this.saveData = this.loadSaveData();
+    if (!this.menuUI) {
+      this.createMenuUI();
+      this.bindKeys();
+    }
+    if (!this.bgCanvas) this.startBackgroundAnimation();
+    this.menuUI.style.display = 'flex';
     this.currentScreen = 'main';
     this.menuIndex = 0;
     this.updateMenuHighlight();
@@ -110,6 +120,15 @@ export class MenuScene extends Scene {
         .customize-btn { padding: 16px; font-size: 12px; background: linear-gradient(135deg, #1a1a1a, #0d0d0d); border: 3px solid #333; border-radius: 8px; color: #fff; text-align: center; }
         .customize-btn.locked { opacity: 0.4; cursor: not-allowed; }
         .coming-soon { font-size: 9px; color: #f39c12; margin-top: 16px; text-align: center; }
+        .save-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; }
+        .save-card { display: flex; flex-direction: column; gap: 10px; padding: 14px;
+          min-height: 180px; background: #151515; border: 2px solid #444; border-radius: 8px; }
+        .save-card strong { color: #d66; font-size: 11px; }
+        .save-card p { color: #aaa; font-size: 8px; line-height: 1.7; }
+        .save-actions { display: grid; gap: 6px; margin-top: auto; }
+        .save-actions button { padding: 9px; color: #eee; background: #292929; border: 1px solid #555; cursor: pointer; }
+        .save-actions button:hover { border-color: #b33; }
+        @media (max-width: 700px) { .save-grid { grid-template-columns: 1fr; overflow: auto; } }
 
         /* Back button */
         .back-btn { margin-top: 24px; padding: 12px 32px; font-size: 12px; background: linear-gradient(135deg, #333, #1a1a1a); border: 2px solid #555; border-radius: 6px; color: #aaa; width: 200px; }
@@ -125,7 +144,7 @@ export class MenuScene extends Scene {
         <div class="subtitle">Horror Turn-Based Dungeon Crawler</div>
         <div class="menu-grid">
           <button class="menu-btn start-btn" data-action="start" id="btn-start">⚔ INICIAR JOGO</button>
-          <button class="menu-btn" data-action="continue" id="btn-continue">📜 CONTINUAR</button>
+          <button class="menu-btn" data-action="continue" id="btn-continue">💾 SLOTS DE JOGO</button>
           <button class="menu-btn" data-action="customize" id="btn-customize">⚙ CUSTOMIZAÇÃO</button>
           <button class="menu-btn" data-action="settings" id="btn-settings">🔧 CONFIGURAÇÕES</button>
         </div>
@@ -136,6 +155,13 @@ export class MenuScene extends Scene {
         <div class="title" style="font-size: 20px;">ESCOLHA SUA CLASSE</div>
         <div class="subtitle">Use ← → ↑ ↓ para navegar | Enter para selecionar | ESC para voltar</div>
         <div class="char-grid" id="char-grid"></div>
+        <button class="back-btn" data-action="back">← VOLTAR</button>
+      </div>
+
+      <div id="screen-saves" class="screen">
+        <div class="title" style="font-size: 20px;">JOGOS SALVOS</div>
+        <div class="subtitle">Escolha um slot para continuar, iniciar ou excluir um jogo.</div>
+        <div class="save-grid" id="save-grid"></div>
         <button class="back-btn" data-action="back">← VOLTAR</button>
       </div>
 
@@ -175,18 +201,33 @@ export class MenuScene extends Scene {
       main: document.getElementById('screen-main'),
       characterSelect: document.getElementById('screen-characterSelect'),
       customize: document.getElementById('screen-customize'),
-      settings: document.getElementById('screen-settings')
+      settings: document.getElementById('screen-settings'),
+      saves: document.getElementById('screen-saves')
     };
     this.charGrid = document.getElementById('char-grid');
+    this.saveGrid = document.getElementById('save-grid');
     this.menuButtons = this.screens.main.querySelectorAll('.menu-btn');
     this.backButtons = this.menuUI.querySelectorAll('.back-btn');
 
     // Render character cards
     this.renderCharacterGrid();
 
-    // Add click handlers
-    this.menuUI.querySelectorAll('[data-action]').forEach(btn => {
-      btn.addEventListener('click', () => this.onAction(btn.dataset.action));
+    this.menuUI.addEventListener('click', event => {
+      const button = event.target.closest('button[data-action]');
+      if (button && !button.classList.contains('select-btn')) {
+        this.onAction(button.dataset.action, button.dataset.slotId);
+      }
+    });
+    this.charGrid.addEventListener('click', event => {
+      const button = event.target.closest('.select-btn');
+      const card = event.target.closest('.char-card');
+      if (button) {
+        event.stopPropagation();
+        if (!button.disabled) this.selectCharacter(button.dataset.charId);
+      } else if (card && !card.classList.contains('locked')) {
+        event.stopPropagation();
+        this.selectCharacter(card.dataset.charId);
+      }
     });
   }
 
@@ -236,15 +277,6 @@ export class MenuScene extends Scene {
       this.charGrid.appendChild(card);
     });
 
-    // Add click handlers for select buttons
-    this.charGrid.querySelectorAll('.select-btn:not(:disabled)').forEach(btn => {
-      btn.addEventListener('click', () => this.selectCharacter(btn.dataset.charId));
-    });
-
-    // Card click = select
-    this.charGrid.querySelectorAll('.char-card:not(.locked)').forEach(card => {
-      card.addEventListener('click', () => this.selectCharacter(card.dataset.charId));
-    });
   }
 
   getUnlockText(req) {
@@ -265,15 +297,28 @@ export class MenuScene extends Scene {
     this.currentScreen = screenName;
   }
 
-  onAction(action) {
+  onAction(action, slotId) {
     switch (action) {
       case 'start':
-        this.showScreen('characterSelect');
-        this.charSelectIndex = 0;
-        this.updateCharSelection();
+        this.startNewSave(SAVE_SLOTS[0]);
         break;
       case 'continue':
-        this.continueGame();
+        this.showSaveSlots();
+        break;
+      case 'loadSave':
+        this.loadSavedGame(slotId);
+        break;
+      case 'newSave':
+        this.startNewSave(slotId);
+        break;
+      case 'deleteSave':
+        this.deleteSave(slotId);
+        break;
+      case 'legacyContinue':
+        this.startGame(this.saveData.lastCharacter || 'skeleton_warrior', this.saveData.lastFloor || 1, {
+          slotId: SAVE_SLOTS[0],
+          isNewGame: false
+        });
         break;
       case 'customize':
         this.showScreen('customize');
@@ -292,30 +337,120 @@ export class MenuScene extends Scene {
 
   goBack() {
     if (this.currentScreen === 'characterSelect') {
-      this.showScreen('main');
+      this.showScreen(this.returnScreen);
       this.menuIndex = 0;
       this.updateMenuHighlight();
-    } else if (this.currentScreen === 'customize' || this.currentScreen === 'settings') {
+    } else if (this.currentScreen === 'customize' || this.currentScreen === 'settings' ||
+               this.currentScreen === 'saves') {
       this.showScreen('main');
-      this.menuIndex = this.currentScreen === 'customize' ? 2 : 3;
+      this.menuIndex = this.currentScreen === 'customize' ? 2
+        : this.currentScreen === 'settings' ? 3 : 1;
       this.updateMenuHighlight();
     }
   }
 
-  continueGame() {
-    if (this.saveData?.lastFloor) {
-      this.startGame(this.saveData.lastCharacter || 'skeleton_warrior', this.saveData.lastFloor);
-    } else {
-      this.showScreen('characterSelect');
+  async showSaveSlots() {
+    this.showScreen('saves');
+    this.saveGrid.textContent = 'Carregando saves...';
+    try {
+      this.saveRecords = await this.saveSystem.list();
+    } catch (error) {
+      console.error('Falha ao listar saves:', error);
+      this.saveGrid.textContent = 'Não foi possível carregar os saves.';
+      return;
+    }
+
+    this.saveGrid.innerHTML = '';
+    this.saveRecords.forEach((record, index) => {
+      const slotId = SAVE_SLOTS[index];
+      const card = document.createElement('div');
+      card.className = 'save-card';
+      const title = document.createElement('strong');
+      title.textContent = `SLOT ${index + 1}`;
+      const details = document.createElement('p');
+      const actions = document.createElement('div');
+      actions.className = 'save-actions';
+      if (record?.state) {
+        const player = record.state.player || {};
+        const savedAt = new Date(record.updatedAt).toLocaleString();
+        details.textContent = `${player.name || record.state.characterId || 'Aventureiro'} · Andar ${record.state.floor || 1} · ${savedAt}`;
+        actions.append(
+          this.createSlotButton('loadSave', slotId, 'CONTINUAR'),
+          this.createSlotButton('newSave', slotId, 'NOVO JOGO'),
+          this.createSlotButton('deleteSave', slotId, 'EXCLUIR')
+        );
+      } else {
+        details.textContent = 'Slot vazio.';
+        actions.append(this.createSlotButton('newSave', slotId, 'NOVO JOGO'));
+      }
+      card.append(title, details, actions);
+      this.saveGrid.appendChild(card);
+    });
+    if (!this.saveRecords.some(Boolean) && this.saveData?.lastFloor) {
+      const legacy = document.createElement('div');
+      legacy.className = 'save-card';
+      legacy.innerHTML = '<strong>SAVE ANTIGO</strong><p>Progresso legado detectado. O mapa será criado e salvo no novo formato.</p>';
+      legacy.appendChild(this.createSlotButton('legacyContinue', SAVE_SLOTS[0], 'CONTINUAR'));
+      this.saveGrid.appendChild(legacy);
+    }
+  }
+
+  createSlotButton(action, slotId, label) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.action = action;
+    button.dataset.slotId = slotId;
+    button.textContent = label;
+    return button;
+  }
+
+  async startNewSave(slotId) {
+    if (!SAVE_SLOTS.includes(slotId)) return;
+    const existing = await this.saveSystem.load(slotId);
+    if (existing && !window.confirm(`Substituir o save do ${slotId}?`)) return;
+    this.selectedSaveSlot = slotId;
+    this.returnScreen = this.currentScreen === 'saves' ? 'saves' : 'main';
+    this.showScreen('characterSelect');
+    this.charSelectIndex = 0;
+    this.updateCharSelection();
+  }
+
+  async loadSavedGame(slotId) {
+    try {
+      const record = await this.saveSystem.load(slotId);
+      if (!record?.state) throw new Error('O slot não contém um save válido.');
+      this.menuUI.style.display = 'none';
+      eventBus.emit('menuStartGame', {
+        slotId,
+        savedGame: record.state,
+        isNewGame: false
+      });
+    } catch (error) {
+      console.error(`Falha ao carregar o slot ${slotId}:`, error);
+      window.alert(`Não foi possível carregar o save: ${error.message}`);
+    }
+  }
+
+  async deleteSave(slotId) {
+    if (!window.confirm(`Excluir o save do ${slotId}?`)) return;
+    try {
+      await this.saveSystem.remove(slotId);
+      await this.showSaveSlots();
+    } catch (error) {
+      console.error(`Falha ao excluir o slot ${slotId}:`, error);
+      window.alert(`Não foi possível excluir o save: ${error.message}`);
     }
   }
 
   selectCharacter(charId) {
     this.selectedCharacterId = charId;
-    this.startGame(charId, 1);
+    this.startGame(charId, 1, {
+      slotId: this.selectedSaveSlot,
+      isNewGame: true
+    });
   }
 
-  startGame(characterId, floor) {
+  startGame(characterId, floor, options = {}) {
     // Salva seleção
     this.saveData.lastCharacter = characterId;
     this.saveData.lastFloor = floor;
@@ -325,7 +460,12 @@ export class MenuScene extends Scene {
     this.menuUI.style.display = 'none';
 
     // Emite evento para engine trocar para DungeonScene
-    eventBus.emit('menuStartGame', { characterId, floor });
+    eventBus.emit('menuStartGame', {
+      characterId,
+      floor,
+      slotId: options.slotId || this.selectedSaveSlot,
+      isNewGame: options.isNewGame !== false
+    });
   }
 
   // ========== TECLADO ==========
@@ -343,6 +483,7 @@ export class MenuScene extends Scene {
           break;
         case 'customize':
         case 'settings':
+        case 'saves':
           if (e.key === 'Escape' || e.key === 'x') this.goBack();
           break;
       }
@@ -447,7 +588,8 @@ export class MenuScene extends Scene {
     this.bgCtx = this.bgCanvas.getContext('2d');
     this.resizeBgCanvas();
 
-    window.addEventListener('resize', () => this.resizeBgCanvas());
+    this.resizeHandler = () => this.resizeBgCanvas();
+    window.addEventListener('resize', this.resizeHandler);
 
     // Inicializa partículas
     this.particles = [];
@@ -533,6 +675,7 @@ export class MenuScene extends Scene {
 
   stopBackgroundAnimation() {
     if (this.bgAnimationId) cancelAnimationFrame(this.bgAnimationId);
+    window.removeEventListener('resize', this.resizeHandler);
     this.bgCanvas?.remove();
     this.bgCanvas = null;
     this.bgCtx = null;
@@ -541,17 +684,12 @@ export class MenuScene extends Scene {
   // ========== SAVE DATA ==========
 
   loadSaveData() {
-    try {
-      const data = localStorage.getItem('skeleton_dungeon_save');
-      return data ? JSON.parse(data) : { highestFloor: 1, totalEnemiesKilled: 0, speedRuns: 0, totalHealingDone: 0 };
-    } catch {
-      return { highestFloor: 1, totalEnemiesKilled: 0, speedRuns: 0, totalHealingDone: 0 };
-    }
+    return this.saveSystem.loadProgress();
   }
 
   saveSaveData(data) {
     try {
-      localStorage.setItem('skeleton_dungeon_save', JSON.stringify(data));
+      this.saveSystem.saveProgress(data);
     } catch (e) {
       console.warn('Failed to save:', e);
     }

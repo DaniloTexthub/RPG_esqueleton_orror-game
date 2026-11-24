@@ -2,6 +2,7 @@
 
 > **Protótipo 2D em JavaScript vanilla (Vite) com arquitetura ECS escalável**
 > **Stack:** HTML5 Canvas + ES6 Modules + Vite | **Arquitetura:** ECS leve, Renderer abstraído (2D→3D ready)
+> **Fase atual:** Persistência, progressão e inventário implementados; sincronização MySQL é opcional e não incluída.
 
 ---
 
@@ -62,6 +63,20 @@ Jogo de masmorra com terror, protagonista esqueleto, movimento em grid (WASD), c
 - Animações centralizadas no `AnimationSystem`, sem atualização duplicada no render
 - Partículas simples de impacto e poeira ligadas aos eventos de combate/movimento
 
+### Fase 3 — Persistência & Progressão (CONCLUÍDA)
+- Três slots locais em IndexedDB, com espelho/fallback em localStorage e metadados de data/classe/andar
+- Saves restauram seed, mapa, portas, inimigos ativos, posição, atributos, inventário, equipamento e habilidades
+- Progresso de nível concede pontos; árvore de habilidades aplica bônus persistentes
+- Inventário abre com `I`, permite usar poções, equipar arma/armadura e consome a chave em uma porta trancada
+- O save legado de progresso continua disponível para migração; sincronização MySQL permanece opcional
+
+### Fase 4 — Procedural & Conteúdo (CONCLUÍDA)
+- Chaves coloridas abrem portas correspondentes; salas secretas guardam itens e armadilhas ativam uma única vez
+- Loot ponderado por inimigo/andar com raridades, além de ouro recebido ao vencer combates
+- Chefes escaláveis aparecem a cada cinco andares e usam golpe devastador e fase de fúria
+- Eventos aleatórios incluem santuários de cura e comerciantes com poções e equipamentos
+- Saves preservam itens coletados, estado de portas/eventos, ouro e estado dos chefes
+
 ### Masmorras procedurais
 - Mapas de 45×33 tiles com câmera mantendo a área visível original de 25×18
 - Seis salas aleatórias em setores conectados por corredores; escadas em salas separadas
@@ -102,6 +117,7 @@ npm run dev       # Abre http://localhost:5173
 |-------|------|
 | **WASD / Setas** | Move player (1 tile, suave) |
 | **E** | Interage (abre/fecha porta adjacente) |
+| **I** | Abre/fecha inventário e árvore de habilidades |
 | **1/2/3/4** | Combate: Atacar/Defender/Item/Fugir |
 | **Setas + Enter/Z** | Navega menus combate |
 | **ESC/X** | Volta menu golpes → ações |
@@ -128,6 +144,9 @@ src/
 │   ├── InputSystem.js         # Teclado → engine.input + lastDirection + lastInteract (E)
 │   ├── MovementSystem.js      # WASD + grid collision + lerp + combate trigger + interação E + escadas
 │   ├── CombatSystem.js        # Turnos, iniciativa speed, ações player, IA inimigo, XP/level
+│   ├── InventorySystem.js     # Consumíveis, itens empilháveis e equipamento
+│   ├── SkillSystem.js         # Árvore simples de habilidades e bônus
+│   ├── SaveSystem.js          # Slots IndexedDB com fallback localStorage
 │   └── RenderSystem.js        # Draw map + entities (zIndex sort)
 ├── components/
 │   ├── Position.js            # Grid coords (x, y) + clone()
@@ -146,6 +165,9 @@ src/
 │   ├── DungeonScene.js        # Mapa proc, spawn, floor transition, combate return
 │   ├── CombatScene.js         # Fade in/out, CombatSystem+CombatUI, component migration
 │   └── MenuScene.js           # Main menu, character select, achievements, customize (locked)
+├── ui/
+│   ├── CombatUI.js            # Menus e fluxo visual de combate
+│   └── InventoryUI.js         # Itens, equipamento e habilidades (tecla I)
 ├── entities/
 │   ├── createPlayer.js        # Factory: usa characterId → stats/cores/moves da classe
 │   └── createEnemy.js         # Factory: zumbi, esqueleto, fantasma, morcego

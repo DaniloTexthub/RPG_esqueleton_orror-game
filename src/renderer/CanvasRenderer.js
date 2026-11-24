@@ -193,14 +193,57 @@ export class CanvasRenderer {
     const screenX = gx * this.tileSize - this.context.camera.x;
     const screenY = gy * this.tileSize - this.context.camera.y;
 
+    this.ctx.save();
     switch (feature.type) {
       case 'door':
-        this.ctx.fillStyle = feature.state === 'closed' ? '#4a2a1a' : '#251a12';
+      case 'secret_door':
+        if (feature.type === 'secret_door' && feature.state === 'hidden') break;
+        this.ctx.fillStyle = feature.type === 'secret_door'
+          ? (feature.state === 'open' ? '#17112a' : '#30204a')
+          : feature.state === 'closed'
+            ? ({ red: '#642323', blue: '#233e64', green: '#285333' }[feature.keyColor] || '#4a2a1a')
+            : '#251a12';
         this.ctx.fillRect(screenX + 4, screenY + 3, this.tileSize - 8, this.tileSize - 6);
-        this.ctx.strokeStyle = '#7a4a2a';
+        this.ctx.strokeStyle = feature.type === 'secret_door'
+          ? '#a58bd1'
+          : ({ red: '#d36b6b', blue: '#6b9bd3', green: '#79bd7b' }[feature.keyColor] || '#7a4a2a');
         this.ctx.strokeRect(screenX + 6.5, screenY + 5.5, this.tileSize - 13, this.tileSize - 11);
         this.ctx.fillStyle = '#c0a070';
         this.ctx.fillRect(screenX + this.tileSize - 10, screenY + 15, 2, 2);
+        break;
+      case 'item': {
+        const keyColors = { key_red: '#f04b4b', key_blue: '#4b8ff0', key_green: '#57c66a' };
+        this.ctx.fillStyle = keyColors[feature.itemId] || '#e5c34b';
+        this.ctx.fillRect(screenX + 12, screenY + 10, 9, 12);
+        this.ctx.fillRect(screenX + 17, screenY + 18, 7, 3);
+        break;
+      }
+      case 'trap':
+        if (!feature.activated) {
+          this.ctx.fillStyle = '#b34b4b';
+          this.ctx.font = 'bold 22px monospace';
+          this.ctx.textAlign = 'center';
+          this.ctx.fillText('^', screenX + this.tileSize / 2, screenY + 24);
+        }
+        break;
+      case 'sanctuary':
+        this.ctx.fillStyle = feature.used ? '#3d5244' : '#69c99a';
+        this.ctx.beginPath();
+        this.ctx.arc(screenX + 16, screenY + 16, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.fillStyle = '#10251a';
+        this.ctx.fillRect(screenX + 14, screenY + 10, 4, 12);
+        this.ctx.fillRect(screenX + 10, screenY + 14, 12, 4);
+        break;
+      case 'merchant':
+        this.ctx.fillStyle = '#d5a846';
+        this.ctx.fillRect(screenX + 7, screenY + 8, 18, 17);
+        this.ctx.strokeStyle = '#f1d27b';
+        this.ctx.strokeRect(screenX + 8.5, screenY + 9.5, 15, 14);
+        this.ctx.fillStyle = '#201809';
+        this.ctx.font = 'bold 12px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('$', screenX + 16, screenY + 21);
         break;
       case 'stairs_down':
         this.ctx.strokeStyle = '#77745f';
@@ -225,6 +268,7 @@ export class CanvasRenderer {
         }
         break;
     }
+    this.ctx.restore();
   }
 
   // Desenha entity (chamado por RenderSystem)

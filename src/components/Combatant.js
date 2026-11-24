@@ -10,6 +10,8 @@ export class Combatant extends Component {
     // Identidade
     this.name = config.name || 'Combatente';
     this.isPlayer = config.isPlayer || false;
+    this.isBoss = config.isBoss === true;
+    this.bossEnraged = config.bossEnraged === true;
 
     // Stats base
     this.maxHP = config.maxHP || 10;
@@ -24,6 +26,8 @@ export class Combatant extends Component {
     this.xp = config.xp || 0;
     this.xpToNext = config.xpToNext || 100;
     this.level = config.level || 1;
+    this.skillPoints = config.skillPoints || 0;
+    this.unlockedSkills = [...(config.unlockedSkills || [])];
 
     // Estado de combate
     this.isDefending = false;
@@ -104,15 +108,17 @@ export class Combatant extends Component {
   gainXP(amount) {
     if (!this.isPlayer) return false;
     this.xp += amount;
-    if (this.xp >= this.xpToNext) {
+    let leveledUp = false;
+    while (this.xp >= this.xpToNext) {
       this.levelUp();
-      return true;
+      leveledUp = true;
     }
-    return false;
+    return leveledUp;
   }
 
   levelUp() {
     this.level++;
+    this.skillPoints++;
     this.xp -= this.xpToNext;
     this.xpToNext = Math.floor(this.xpToNext * 1.5);
 
@@ -143,6 +149,8 @@ export class Combatant extends Component {
       xp: config.xp || 0,
       xpToNext: config.xpToNext || 100,
       level: config.level || 1,
+      skillPoints: config.skillPoints || 0,
+      unlockedSkills: config.unlockedSkills || [],
       spriteColor: '#00ff00',
       spriteAccent: '#ffffff'
     });
@@ -154,7 +162,7 @@ export class Combatant extends Component {
       name: typeData.name,
       isPlayer: false,
       maxHP: typeData.maxHP,
-      hp: typeData.maxHP,
+      hp: typeData.hp !== undefined ? typeData.hp : typeData.maxHP,
       attack: typeData.attack,
       defense: typeData.defense,
       speed: typeData.speed,
@@ -162,7 +170,9 @@ export class Combatant extends Component {
       ap: 3,
       xp: typeData.xp,
       spriteColor: typeData.color,
-      spriteAccent: typeData.accentColor
+      spriteAccent: typeData.accentColor,
+      isBoss: typeData.isBoss,
+      bossEnraged: typeData.bossEnraged
     });
   }
 }

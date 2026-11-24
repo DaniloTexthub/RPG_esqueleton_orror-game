@@ -1,6 +1,6 @@
 # PLANO.md — Roadmap & Tarefas do RPG Skeleton Dungeon
 
-> **Atualizado:** 2026-11-23 | **Status atual:** Fase 1 (Combate) ✅ + Interações Dungeon ✅ + Fase 2 (Sprites & Visual) ✅
+> **Atualizado:** 2026-11-23 | **Status atual:** Fases 1–4 ✅ (MySQL opcional não implementado)
 
 ---
 
@@ -79,25 +79,29 @@
 
 ## 💾 Fase 3 — Persistência & Progressão
 
-| ID | Tarefa | Prioridade | Estimativa | Dependências |
-|----|--------|------------|------------|--------------|
-| P01 | Save/Load no localStorage (player, floor, seed, inventário) | 🔴 Alta | 2h | C06 |
-| P02 | Schema IndexedDB para saves múltiplos + metadados | 🟡 Média | 2h | P01 |
-| P03 | MySQL sync (opcional): backend Node/Express + API REST | 🟢 Baixa | 6h | P02 |
-| P04 | Progressão: level up, stats, árvore de habilidades simples | 🟡 Média | 3h | C06 |
-| P05 | Inventário: slots, itens (poção, arma, chave), equipamento | 🟡 Média | 3h | P04 |
+| ID | Tarefa | Prioridade | Estimativa | Dependências | Status |
+|----|--------|------------|------------|--------------|--------|
+| P01 | Save/Load no localStorage (player, floor, seed, inventário) | 🔴 Alta | 2h | C06 | ✅ |
+| P02 | Schema IndexedDB para saves múltiplos + metadados | 🟡 Média | 2h | P01 | ✅ (3 slots + fallback) |
+| P03 | MySQL sync (opcional): backend Node/Express + API REST | 🟢 Baixa | 6h | P02 | Opcional — não implementado |
+| P04 | Progressão: level up, stats, árvore de habilidades simples | 🟡 Média | 3h | C06 | ✅ |
+| P05 | Inventário: slots, itens (poção, arma, chave), equipamento | 🟡 Média | 3h | P04 | ✅ |
+
+**Fase 3 implementada:** saves restauram o andar por seed, posição e estado do jogador, inimigos ativos e portas; a interface de slots permite continuar, iniciar ou excluir. A tecla `I` abre o inventário e as habilidades. MySQL permanece fora do escopo por ser opcional.
 
 ---
 
 ## 🏗️ Fase 4 — Procedural & Conteúdo
 
-| ID | Tarefa | Prioridade | Estimativa | Dependências |
-|----|--------|------------|------------|------------|
+| ID | Tarefa | Prioridade | Estimativa | Dependências | Status |
+|----|--------|------------|------------|--------------|--------|
 | G01 | Geração procedural estruturada (salas e corredores conectados) | 🟡 Média | 3h | F05 | ✅ |
-| G02 | Chaves/portas coloridas, salas secretas, armadilhas | 🟡 Média | 2h | G01 |
-| G03 | Loot tables por andar/inimigo + raridade | 🟢 Baixa | 2h | P05 |
-| G04 | Boss por cada 5 andares (mecânica única) | 🟢 Baixa | 4h | C06, G01 |
-| G05 | Eventos aleatórios (santuário, comerciante, armadilha) | 🟢 Baixa | 2h | G01 |
+| G02 | Chaves/portas coloridas, salas secretas, armadilhas | 🟡 Média | 2h | G01 | ✅ |
+| G03 | Loot tables por andar/inimigo + raridade | 🟢 Baixa | 2h | P05 | ✅ |
+| G04 | Boss por cada 5 andares (mecânica única) | 🟢 Baixa | 4h | C06, G01 | ✅ |
+| G05 | Eventos aleatórios (santuário, comerciante, armadilha) | 🟢 Baixa | 2h | G01 | ✅ |
+
+**Fase 4 implementada:** chaves coloridas abrem portas correspondentes; salas secretas escondem itens; armadilhas, santuários e comerciantes são posicionados durante a geração determinística. Inimigos usam tabelas de loot com raridade, chefes surgem a cada cinco andares e entram em fúria na metade da vida. Estado de itens, eventos e chefes é preservado nos saves.
 
 ---
 

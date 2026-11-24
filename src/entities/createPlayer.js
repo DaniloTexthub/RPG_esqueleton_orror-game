@@ -9,7 +9,7 @@ import { PlayerTag } from '../components/PlayerTag.js';
 import { COLORS, TILE_SIZE } from '../utils/constants.js';
 import { getCharacterClass } from '../data/characters.js';
 
-export function createPlayer(x, y, characterId = 'skeleton_warrior') {
+export function createPlayer(x, y, characterId = 'skeleton_warrior', playerData = {}) {
   const entity = new Entity();
   const charClass = getCharacterClass(characterId);
 
@@ -60,19 +60,29 @@ export function createPlayer(x, y, characterId = 'skeleton_warrior') {
 
   // PlayerTag - stats da classe escolhida
   entity.add(new PlayerTag({
-    name: charClass?.name || 'Skeleton',
+    name: playerData.name || charClass?.name || 'Skeleton',
     characterId: characterId,
-    maxHP: stats.maxHP,
-    hp: stats.maxHP,
-    attack: stats.attack,
-    defense: stats.defense,
-    speed: stats.speed,
-    maxAP: stats.maxAP,
-    ap: stats.maxAP,
-    level: 1,
-    floor: 1,
-    xp: 0,
-    xpToNext: stats.xpToNext
+    maxHP: playerData.maxHP ?? stats.maxHP,
+    hp: playerData.hp ?? stats.maxHP,
+    attack: playerData.attack ?? stats.attack,
+    defense: playerData.defense ?? stats.defense,
+    speed: playerData.speed ?? stats.speed,
+    maxAP: playerData.maxAP ?? stats.maxAP,
+    ap: playerData.ap ?? stats.maxAP,
+    level: playerData.level ?? 1,
+    floor: playerData.floor ?? 1,
+    xp: playerData.xp ?? 0,
+    xpToNext: playerData.xpToNext ?? stats.xpToNext,
+    skillPoints: playerData.skillPoints ?? 0,
+    gold: playerData.gold ?? 20,
+    unlockedSkills: playerData.unlockedSkills ||
+      charClass?.moves.filter(move => move.unlockLevel === 1).map(move => move.id) || [],
+    inventory: playerData.inventory || [
+      { id: 'small_potion', quantity: 2 },
+      { id: 'rusty_sword', quantity: 1 },
+      { id: 'leather_armor', quantity: 1 }
+    ],
+    equipped: playerData.equipped || { weapon: null, armor: null, accessory: null }
   }));
 
   return entity;

@@ -302,6 +302,8 @@ export class CombatUI {
         this.handleMainMenuKeys(e);
       } else if (this.menuState === 'moves') {
         this.handleMovesMenuKeys(e);
+      } else if (this.menuState === 'items') {
+        this.handleItemsMenuKeys(e);
       } else if (this.waitingForInput) {
         if (e.key === 'Enter' || e.key === 'z' || e.key === ' ') {
           this.advanceMessage();
@@ -363,7 +365,7 @@ export class CombatUI {
         this.showMovesMenu();
         break;
       case 'bag':
-        this.queueMessage('A bolsa está vazia...');
+        this.showItemsMenu();
         break;
       case 'party':
         this.queueMessage('Não há outros membros no time.');
@@ -388,6 +390,86 @@ export class CombatUI {
   }
 
   // ========== MENU DE GOLPES ==========
+
+  showItemsMenu() {
+    const items = this.combatSystem.getUsableItems();
+    if (items.length === 0) {
+      this.queueMessage('Não há consumíveis na bolsa.');
+      return;
+    }
+
+    this.menuState = 'items';
+    this.selectedIndex = 0;
+    this.movesMenu.innerHTML = '';
+    items.forEach((item, index) => {
+      const button = document.createElement('button');
+      button.className = 'menu-btn move-btn';
+      button.innerHTML = `
+        <div style="font-size: 10px; font-weight: bold;">${item.definition.name}</div>
+        <div style="font-size: 8px; color: #aaa;">x${item.quantity} · ${item.definition.description}</div>
+      `;
+      button.style.cssText = `
+        padding: 10px; color: #fff; background: #19301f;
+        border: 2px solid #2ecc71; border-radius: 6px; cursor: pointer;
+        display: flex; flex-direction: column; gap: 4px; text-align: left;
+      `;
+      button.onmouseenter = () => this.selectItemIndex(index);
+      button.onclick = () => this.onItemSelected(index);
+      this.movesMenu.appendChild(button);
+    });
+
+    this.actionMenu.style.display = 'none';
+    this.movesMenu.style.display = 'grid';
+    this.moveInfo.style.display = 'none';
+    this.selectItemIndex(0);
+  }
+
+  selectItemIndex(index) {
+    const buttons = this.movesMenu.querySelectorAll('.move-btn');
+    this.selectedIndex = Math.max(0, Math.min(buttons.length - 1, index));
+    buttons.forEach((button, i) => button.classList.toggle('selected', i === this.selectedIndex));
+  }
+
+  handleItemsMenuKeys(event) {
+    const count = this.movesMenu.querySelectorAll('.move-btn').length;
+    const columns = 2;
+    const rows = Math.ceil(count / columns);
+    let newIndex = this.selectedIndex;
+    switch (event.key) {
+      case 'ArrowRight':
+        if (this.selectedIndex % columns < columns - 1 && this.selectedIndex + 1 < count) newIndex++;
+        break;
+      case 'ArrowLeft':
+        if (this.selectedIndex % columns > 0) newIndex--;
+        break;
+      case 'ArrowDown':
+        if (Math.floor(this.selectedIndex / columns) < rows - 1 &&
+            this.selectedIndex + columns < count) newIndex += columns;
+        break;
+      case 'ArrowUp':
+        if (this.selectedIndex - columns >= 0) newIndex -= columns;
+        break;
+      case 'Enter':
+      case 'z':
+      case ' ':
+        this.onItemSelected(this.selectedIndex);
+        return;
+      case 'Escape':
+      case 'x':
+        this.backToMainMenu();
+        return;
+    }
+    if (newIndex !== this.selectedIndex) this.selectItemIndex(newIndex);
+  }
+
+  onItemSelected(index) {
+    const item = this.combatSystem.getUsableItems()[index];
+    if (!item) return;
+    this.backToMainMenu();
+    if (!this.combatSystem.playerUseItem(item.index)) {
+      this.queueMessage('Não foi possível usar esse item agora.');
+    }
+  }
 
   showMovesMenu() {
     this.menuState = 'moves';
@@ -588,7 +670,9 @@ export class CombatUI {
     this.menuState = 'main';
 
     // Mensagem inicial
-    this.queueMessage(`Um ${enemyCombatant.name} selvagem apareceu!`);
+    this.queueMessage(enemyCombatant.isBoss
+      ? `CHEFE: ${enemyCombatant.name} bloqueia o caminho!`
+      : `Um ${enemyCombatant.name} selvagem apareceu!`);
     this.queueMessage(`Vá, ${playerCombatant.name}!`);
   }
 
@@ -622,7 +706,7 @@ export class CombatUI {
       this.enemyLevel.textContent = `Lv. ${Math.max(1, Math.floor(combatant.maxHP / 10))}`;
     }
 
-    nameEl.textContent = combatant.name.toUpperCase();
+    nameEl.textContent = `${combatant.isBoss ? '★ CHEFE: ' : ''}${combatant.name.toUpperCase()}`;
     nameEl.style.color = isPlayer ? '#6bff6b' : '#ff6b6b';
 
     const hpRatio = combatant.getHPRatio();
@@ -797,7 +881,10 @@ export class CombatUI {
       const text = isPlayerVictory ? '✨ VITÓRIA! ✨' : (combatData.fled ? '💨 FUGA!' : '☠ DERROTA ☠');
       const color = isPlayerVictory ? '#2ecc71' : (combatData.fled ? '#f39c12' : '#e74c3c');
       const subText = isPlayerVictory
-        ? `XP +${combatData.xpGained || 0}  Ouro +${combatData.goldGained || 0}`
+        ? `XP +${combatData.xpGained || 0}  Ouro +${combatData.goldGained || 0}` +
+          (combatData.lootDrops?.length
+            ? ` | Itens: ${combatData.lootDrops.map(drop => drop.itemName).join(', ')}`
+            : '')
         : (combatData.fled ? 'Você escapou com vida...' : 'Seus ossos jazem na masmorra...');
 
       resultOverlay.innerHTML = `
