@@ -22,6 +22,11 @@ import { TILE_TYPE, COLORS, GRID_WIDTH, GRID_HEIGHT } from '../utils/constants.j
 import { eventBus } from '../core/EventBus.js';
 import { lerp } from '../utils/math.js';
 
+function isWalkablePosition(gridMap, x, y) {
+  return Number.isFinite(x) && Number.isFinite(y) &&
+    gridMap.isWalkable(Math.floor(x + 0.5), Math.floor(y + 0.5));
+}
+
 export class DungeonScene extends Scene {
   constructor(saveSystem = new SaveSystem()) {
     super('DungeonScene');
@@ -38,6 +43,8 @@ export class DungeonScene extends Scene {
     this.seed = null;
     this.defeatedEnemySpawns = new Set();
     this.collectedItems = new Set();
+    this.destroyedCrates = new Set();
+    this.floorLayouts = new Map();
     this.saveTimer = null;
     this.toastTimer = null;
   }
@@ -105,8 +112,9 @@ export class DungeonScene extends Scene {
 
       // Se novo jogo, regenera andar do zero
       if (this.isNewGame) {
-        this.floor = 1;
-        this.regenerateFloor(this.createSeed());
+        this.floor = data.floor || (55 + Math.floor(Math.random() * 48));
+        this.floorLayouts.clear();
+        this.regenerateFloor(this.createSeed(), 'stairs_down');
         this.scheduleAutoSave();
       } else {
         this.regenerateFloor();
@@ -175,7 +183,11 @@ export class DungeonScene extends Scene {
       eventBus.on('playerHealed', this.onPlayerHealed.bind(this)),
       eventBus.on('itemPickedUp', this.onItemPickedUp.bind(this)),
       eventBus.on('dungeonEventInteract', this.onDungeonEventInteract.bind(this)),
-      eventBus.on('secretFound', this.onSecretFound.bind(this))
+      eventBus.on('secretFound', this.onSecretFound.bind(this)),
+      eventBus.on('crateDestroyed', this.onCrateDestroyed.bind(this)),
+      eventBus.on('actionCrate', this.onActionCrate.bind(this)),
+      eventBus.on('actionAttack', this.onActionAttack.bind(this)),
+      eventBus.on('actionEnemyAttack', this.onActionEnemyAttack.bind(this))
     ];
   }
 
@@ -183,23 +195,71 @@ export class DungeonScene extends Scene {
     return Math.floor(Math.random() * 0x100000000) >>> 0;
   }
 
-  restoreSavedGame(state) {
-    if (!state.player || !Number.isInteger(state.seed) || !Number.isInteger(state.floor)) {
-      throw new Error('O save está incompleto ou corrompido.');
+  // Captura o layout e o estado completo do andar atual
+  captureFloorLayout() {
+    if (!this.gridMap) return null;
+    const position = this.player?.get(Position);
+    const enemies = this.entities.filter(entity => entity.active && entity.hasTag('enemy'))
+      .map(enemy => {
+        const pos = enemy.get(Position);
+        const data = { ...enemy.get(Collider)?.enemyData };
+        const combatant = enemy.get(Combatant);
+        if (combatant) {
+          Object.assign(data, {
+            hp: combatant.hp,
+            maxHP: combatant.maxHP,
+            attack: combatant.attack,
+            defense: combatant.defense,
+            speed: combatant.speed
+          });
+        }
+        return { x: pos.x, y: pos.y, typeId: data.typeId || 1, enemyData: data };
+      });
+    const snapshot = {
+      floor: this.floor,
+      seed: this.seed,
+      map: this.gridMap.toJSON(),
+      playerPosition: position ? { x: position.x, y: position.y } : null,
+      enemies,
+      defeatedEnemies: [...this.defeatedEnemySpawns],
+      collectedItems: [...this.collectedItems],
+      destroyedCrates: [...this.destroyedCrates],
+      destroyedCrates: [...this.destroyedCrates],
+      featureStates: [...this.gridMap.features.values()]
+        .filter(feature => ['door', 'secret_door', 'trap', 'sanctuary', 'merchant', 'crate'].includes(feature.type))
+        .map(({ x, y, type, state, locked, keyColor, used, activated }) => ({
+          x, y, type, state, locked, keyColor, used, activated
+        }))
+    };
+    this.floorLayouts.set(this.floor, snapshot);
+    return snapshot;
+  }
+
+  // Restaura um andar exatamente como estava ao sair dele
+  restoreFloorLayout(snapshot, entrance = null) {
+    this.floor = snapshot.floor;
+    this.seed = snapshot.seed >>> 0;
+    this.gridMap = snapshot.map
+      ? GridMap.fromJSON(snapshot.map)
+      : GridMap.generateDungeon(GRID_WIDTH, GRID_HEIGHT, this.seed);
+    this.entities = this.entities.filter(entity => entity.hasTag('player'));
+    this.player = this.getFirstByTag('player');
+
+    this.collectedItems = new Set(snapshot.collectedItems || []);
+    this.destroyedCrates = new Set(snapshot.destroyedCrates || []);
+    for (const key of this.destroyedCrates) {
+      const [x, y] = key.split(',').map(Number);
+      this.gridMap.removeFeature(x, y);
     }
-
-    this.floor = Math.max(1, state.floor);
-    this.seed = state.seed >>> 0;
-    this.characterId = state.characterId || state.player.characterId || 'skeleton_warrior';
-    this.gridMap = GridMap.generateDungeon(GRID_WIDTH, GRID_HEIGHT, this.seed);
-    this.entities = [];
-
-    this.collectedItems = new Set(state.collectedItems || []);
     for (const key of this.collectedItems) {
       const [x, y] = key.split(',').map(Number);
       this.gridMap.removeFeature(x, y);
     }
-    for (const savedFeature of state.featureStates || state.doors || []) {
+    for (const key of this.destroyedCrates) {
+      const [x, y] = key.split(',').map(Number);
+      this.gridMap.removeFeature(x, y);
+    }
+    for (const savedFeature of snapshot.featureStates || []) {
       const feature = this.gridMap.features.get(`${savedFeature.x},${savedFeature.y}`);
       if (!feature) continue;
       Object.assign(feature, savedFeature);
@@ -210,9 +270,70 @@ export class DungeonScene extends Scene {
       }
     }
 
+    if (this.player) {
+      const pos = this.player.get(Position);
+      const target = entrance || snapshot.playerPosition || this.gridMap.playerSpawn;
+      pos?.set(target.x, target.y);
+    }
+
+    this.defeatedEnemySpawns = new Set(snapshot.defeatedEnemies || []);
+    for (const savedEnemy of snapshot.enemies || []) {
+      if (!isWalkablePosition(this.gridMap, savedEnemy.x, savedEnemy.y)) continue;
+      const enemy = createEnemy(savedEnemy.x, savedEnemy.y, savedEnemy.typeId || 1, {
+        isBoss: savedEnemy.enemyData?.isBoss,
+        floor: this.floor
+      });
+      const collider = enemy.get(Collider);
+      if (collider) collider.enemyData = { ...collider.enemyData, ...savedEnemy.enemyData };
+      this.addEntity(enemy);
+      enemy.addTag('enemy');
+    }
+    this.updateFloorUI();
+  }
+
+  restoreSavedGame(state) {
+    if (!state.player || !Number.isInteger(state.seed) || !Number.isInteger(state.floor)) {
+      throw new Error('O save está incompleto ou corrompido.');
+    }
+
+    this.floor = Math.max(1, state.floor);
+    this.seed = state.seed >>> 0;
+    this.characterId = state.characterId || state.player.characterId || 'skeleton_warrior';
+    this.floorLayouts = new Map();
+    for (const layout of state.floorLayouts || []) {
+      if (Number.isInteger(layout.floor)) this.floorLayouts.set(layout.floor, layout);
+    }
+    const currentLayout = this.floorLayouts.get(this.floor);
+    this.gridMap = currentLayout?.map
+      ? GridMap.fromJSON(currentLayout.map)
+      : GridMap.generateDungeon(GRID_WIDTH, GRID_HEIGHT, this.seed);
+    this.entities = [];
+
+    this.collectedItems = new Set(state.collectedItems || []);
+    this.destroyedCrates = new Set(state.destroyedCrates || currentLayout?.destroyedCrates || []);
+    for (const key of this.collectedItems) {
+      const [x, y] = key.split(',').map(Number);
+      this.gridMap.removeFeature(x, y);
+    }
+    const savedLayout = currentLayout;
+    const layoutFeatureStates = savedLayout?.featureStates || state.featureStates || state.doors || [];
+    for (const savedFeature of layoutFeatureStates) {
+      const feature = this.gridMap.features.get(`${savedFeature.x},${savedFeature.y}`);
+      if (!feature) continue;
+      Object.assign(feature, savedFeature);
+      if (feature.type === 'crate' && feature.state === 'destroyed') {
+        this.gridMap.removeFeature(feature.x, feature.y);
+        continue;
+      }
+      if (['door', 'secret_door'].includes(feature.type)) {
+        const hidden = feature.type === 'secret_door' && feature.state === 'hidden';
+        this.gridMap.set(feature.x, feature.y, hidden ? TILE_TYPE.WALL :
+          feature.state === 'open' ? TILE_TYPE.DOOR_OPEN : TILE_TYPE.DOOR_CLOSED);
+      }
+    }
+
     const savedPlayer = state.player;
-    const spawn = Number.isInteger(savedPlayer.x) && Number.isInteger(savedPlayer.y) &&
-      this.gridMap.isWalkable(savedPlayer.x, savedPlayer.y)
+    const spawn = isWalkablePosition(this.gridMap, savedPlayer.x, savedPlayer.y)
       ? { x: savedPlayer.x, y: savedPlayer.y }
       : this.gridMap.playerSpawn;
     this.player = createPlayer(spawn.x, spawn.y, this.characterId, savedPlayer);
@@ -220,10 +341,11 @@ export class DungeonScene extends Scene {
     this.addEntity(this.player);
     this.player.addTag('player');
 
-    this.defeatedEnemySpawns = new Set(state.defeatedEnemies || []);
-    if (Array.isArray(state.enemies)) {
-      for (const savedEnemy of state.enemies) {
-        if (!this.gridMap.isWalkable(savedEnemy.x, savedEnemy.y)) continue;
+    this.defeatedEnemySpawns = new Set(savedLayout?.defeatedEnemies || state.defeatedEnemies || []);
+    const savedEnemies = savedLayout?.enemies || state.enemies;
+    if (Array.isArray(savedEnemies)) {
+      for (const savedEnemy of savedEnemies) {
+        if (!isWalkablePosition(this.gridMap, savedEnemy.x, savedEnemy.y)) continue;
         const enemy = createEnemy(savedEnemy.x, savedEnemy.y, savedEnemy.typeId || 1, {
           isBoss: savedEnemy.enemyData?.isBoss,
           floor: this.floor
@@ -264,7 +386,7 @@ export class DungeonScene extends Scene {
       });
 
     const state = {
-      version: 1,
+      version: 2,
       characterId: this.characterId,
       floor: this.floor,
       seed: this.seed,
@@ -293,10 +415,14 @@ export class DungeonScene extends Scene {
       defeatedEnemies: [...this.defeatedEnemySpawns],
       collectedItems: [...this.collectedItems],
       featureStates: [...this.gridMap.features.values()]
-        .filter(feature => ['door', 'secret_door', 'trap', 'sanctuary', 'merchant'].includes(feature.type))
+        .filter(feature => ['door', 'secret_door', 'trap', 'sanctuary', 'merchant', 'crate'].includes(feature.type))
         .map(({ x, y, type, state, locked, keyColor, used, activated }) => ({
           x, y, type, state, locked, keyColor, used, activated
-        }))
+        })),
+      floorLayouts: (() => {
+        this.captureFloorLayout();
+        return [...this.floorLayouts.values()];
+      })()
     };
     return this.saveSystem.save(this.slotId, state);
   }
@@ -486,7 +612,7 @@ export class DungeonScene extends Scene {
   }
 
   // Regenera andar (nova dungeon)
-  regenerateFloor(seed = this.createSeed()) {
+  regenerateFloor(seed = this.createSeed(), entranceType = 'stairs_up') {
     // Remove entities antigas (exceto player)
     this.entities = this.entities.filter(e => e.hasTag('player'));
     this.player = this.getFirstByTag('player');
@@ -496,11 +622,16 @@ export class DungeonScene extends Scene {
     this.gridMap = GridMap.generateDungeon(GRID_WIDTH, GRID_HEIGHT, this.seed);
     this.defeatedEnemySpawns.clear();
     this.collectedItems.clear();
+    this.destroyedCrates.clear();
 
-    // Reposiciona player na entrada (escada cima) ou spawn padrão
+    // O jogador entra pelo lado oposto ao sentido usado na transição
     const pos = this.player.get(Position);
-    if (this.gridMap.stairsUp.length > 0) {
-      const stair = this.gridMap.stairsUp[0];
+    const entranceList = entranceType === 'stairs_down'
+      ? this.gridMap.stairsDown
+      : this.gridMap.stairsUp;
+    const entrance = entranceList[0];
+    if (entrance) {
+      const stair = entrance;
       if (pos) pos.set(stair.x, stair.y);
     } else if (pos) {
       pos.set(this.gridMap.playerSpawn.x, this.gridMap.playerSpawn.y);
@@ -512,19 +643,108 @@ export class DungeonScene extends Scene {
     // Atualiza UI
     this.updateFloorUI();
     if (this.player) this.player.get(PlayerTag).floor = this.floor;
+    this.captureFloorLayout();
   }
 
   // Eventos
   onFloorChange({ direction }) {
-    if (direction === 'down') this.floor++;
-    else if (direction === 'up') this.floor = Math.max(1, this.floor - 1);
+    this.captureFloorLayout();
+    if (direction === 'down' && this.floor >= 102) {
+      this.showToast('Este é o andar mais profundo da masmorra.');
+      return;
+    }
+    if (direction === 'up' && this.floor === 1) {
+      this.escapeDungeon();
+      return;
+    }
+    const nextFloor = direction === 'down'
+      ? Math.min(102, this.floor + 1)
+      : Math.max(1, this.floor - 1);
+    const cachedLayout = this.floorLayouts.get(nextFloor);
 
-    this.regenerateFloor();
+    if (cachedLayout) {
+      const entrance = direction === 'down'
+        ? (cachedLayout.map?.stairsUp?.[0] || cachedLayout.map?.playerSpawn)
+        : (cachedLayout.map?.stairsDown?.[0] || cachedLayout.map?.playerSpawn);
+      this.restoreFloorLayout(cachedLayout, entrance);
+    } else {
+      this.floor = nextFloor;
+      this.regenerateFloor(
+        this.createSeed(),
+        direction === 'down' ? 'stairs_up' : 'stairs_down'
+      );
+    }
     this.updateFloorUI();
     this.updateProgress(progress => {
       progress.highestFloor = Math.max(progress.highestFloor, this.floor);
     });
     this.scheduleAutoSave();
+  }
+
+  escapeDungeon() {
+    this.updateProgress(progress => {
+      progress.escapeCount = (progress.escapeCount || 0) + 1;
+      progress.threeDUnlockedCharacterIds = [
+        ...new Set([...(progress.threeDUnlockedCharacterIds || []), this.characterId])
+      ];
+    });
+    this.showToast('Você escapou! Modo 3D liberado para esta classe.');
+    setTimeout(() => this.engine.changeScene('menu'), 1200);
+  }
+
+  onCrateDestroyed({ x, y, itemId }) {
+    this.destroyedCrates.add(`${x},${y}`);
+    const item = this.inventorySystem.getDefinition(itemId);
+    this.showToast(`Caixa destruída: ${item?.name || 'item'} encontrada.`);
+    this.scheduleAutoSave();
+  }
+
+  onActionCrate({ x, y }) {
+    const crate = this.gridMap.features.get(`${x},${y}`);
+    if (crate?.type !== 'crate' || crate.state === 'destroyed') return;
+    crate.state = 'destroyed';
+    this.gridMap.removeFeature(x, y);
+    const loot = ['small_potion', 'large_potion', 'dungeon_key', 'rusty_sword', 'leather_armor'];
+    const itemId = loot[Math.floor(Math.random() * loot.length)];
+    if (this.inventorySystem.addItem(this.player, itemId, 1)) {
+      eventBus.emit('crateDestroyed', { x, y, itemId });
+    }
+  }
+
+  onActionAttack({ enemy }) {
+    if (!this.engine.renderer?.firstPerson || !enemy?.active || !enemy.hasTag('enemy')) return;
+    const playerPosition = this.player?.get(Position);
+    const enemyPosition = enemy.get(Position);
+    const tag = this.player?.get(PlayerTag);
+    const data = enemy.get(Collider)?.enemyData;
+    if (!playerPosition || !enemyPosition || !tag || !data) return;
+
+    const distance = Math.hypot(
+      playerPosition.x - enemyPosition.x,
+      playerPosition.y - enemyPosition.y
+    );
+    if (distance > 7) return;
+    const damage = Math.max(1, tag.attack - (data.defense || 0));
+    data.hp = Math.max(0, (data.hp ?? data.maxHP) - damage);
+    this.showToast(`Ataque: ${damage} de dano.`);
+    if (data.hp === 0) {
+      enemy.active = false;
+      eventBus.emit('enemyDefeated', { enemy });
+    }
+    this.scheduleAutoSave();
+  }
+
+  onActionEnemyAttack({ enemy }) {
+    if (!this.engine.renderer?.firstPerson || !enemy?.active) return;
+    const tag = this.player?.get(PlayerTag);
+    const data = enemy.get(Collider)?.enemyData;
+    if (!tag || !data) return;
+    const damage = Math.max(1, (data.attack || 1) - tag.defense);
+    const dead = tag.takeDamage(damage);
+    this.showToast(`O inimigo ataca: -${damage} HP.`);
+    this.updatePlayerUI();
+    if (dead) this.gameOver();
+    else this.scheduleAutoSave();
   }
 
   onDoorOpen({ x, y }) {

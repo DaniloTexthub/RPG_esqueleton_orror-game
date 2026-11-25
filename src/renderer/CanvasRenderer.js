@@ -6,9 +6,11 @@ import { TILE_SIZE, COLORS, Z_INDEX, TILE_TYPE } from '../utils/constants.js';
 import { getTileDef } from '../map/TileType.js';
 import { lerp } from '../utils/math.js';
 import { eventBus } from '../core/EventBus.js';
+import { Renderer } from './Renderer.js';
 
-export class CanvasRenderer {
+export class CanvasRenderer extends Renderer {
   constructor() {
+    super();
     this.canvas = null;
     this.ctx = null;
     this.engine = null;
@@ -43,6 +45,11 @@ export class CanvasRenderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
+  }
+
+  dispose() {
+    this.unsubscribeParticles?.();
+    this.unsubscribeDust?.();
   }
 
   resize(width, height) {
@@ -158,6 +165,26 @@ export class CanvasRenderer {
         this.drawFeature(fx, fy, feature);
       }
     });
+    this.drawTorchLight();
+  }
+
+  drawTorchLight() {
+    const player = this.engine?.currentScene?.getFirstByTag('player');
+    const pos = player?.get('Position');
+    if (!pos) return;
+
+    const x = pos.x * this.tileSize - this.context.camera.x + this.tileSize / 2;
+    const y = pos.y * this.tileSize - this.context.camera.y + this.tileSize / 2;
+    const radius = this.tileSize * 7;
+    const flicker = Math.sin(performance.now() / 95) * 0.012;
+    const glow = this.ctx.createRadialGradient(x, y, 4, x, y, radius);
+    glow.addColorStop(0, `rgba(255, 170, 95, ${0.12 + flicker})`);
+    glow.addColorStop(0.55, 'rgba(255, 135, 62, 0.045)');
+    glow.addColorStop(1, 'rgba(0, 0, 0, 0.34)');
+    this.ctx.save();
+    this.ctx.fillStyle = glow;
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
   }
 
   // Desenha um tile com acabamento visual discreto
@@ -245,6 +272,19 @@ export class CanvasRenderer {
         this.ctx.textAlign = 'center';
         this.ctx.fillText('$', screenX + 16, screenY + 21);
         break;
+      case 'crate':
+        if (feature.state === 'destroyed') break;
+        this.ctx.fillStyle = '#8a5a2b';
+        this.ctx.fillRect(screenX + 6, screenY + 7, 20, 18);
+        this.ctx.strokeStyle = '#d0a46a';
+        this.ctx.strokeRect(screenX + 7.5, screenY + 8.5, 17, 15);
+        this.ctx.beginPath();
+        this.ctx.moveTo(screenX + 7, screenY + 8);
+        this.ctx.lineTo(screenX + 25, screenY + 24);
+        this.ctx.moveTo(screenX + 25, screenY + 8);
+        this.ctx.lineTo(screenX + 7, screenY + 24);
+        this.ctx.stroke();
+        break;
       case 'stairs_down':
         this.ctx.strokeStyle = '#77745f';
         this.ctx.lineWidth = 2;
@@ -255,6 +295,10 @@ export class CanvasRenderer {
           this.ctx.lineTo(screenX + this.tileSize - 6, y);
           this.ctx.stroke();
         }
+        this.ctx.fillStyle = '#d6c36f';
+        this.ctx.font = 'bold 10px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('DESCER', screenX + 16, screenY + 30);
         break;
       case 'stairs_up':
         this.ctx.strokeStyle = '#77745f';
@@ -266,6 +310,10 @@ export class CanvasRenderer {
           this.ctx.lineTo(screenX + this.tileSize - 6, y);
           this.ctx.stroke();
         }
+        this.ctx.fillStyle = '#9fd0a6';
+        this.ctx.font = 'bold 10px monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('SUBIR', screenX + 16, screenY + 30);
         break;
     }
     this.ctx.restore();
@@ -358,8 +406,8 @@ export class CanvasRenderer {
   drawDefaultSprite(sprite, entity) {
     const isPlayer = entity.hasTag('player');
     const half = this.tileSize / 2;
-    if (sprite.enemyType === 'ghost') {
-      this.drawGhostSprite();
+    if (!isPlayer && sprite.enemyType) {
+      this.drawEnemySprite(sprite.enemyType, sprite, half);
       return;
     }
 
@@ -368,6 +416,71 @@ export class CanvasRenderer {
     this.ctx.fillStyle = sprite.accentColor || (isPlayer ? COLORS.PLAYER_ACCENT : COLORS.ENEMY_ACCENT);
     this.ctx.fillRect(-half + 8, -half + 7, 4, 4);
     this.ctx.fillRect(half - 12, -half + 7, 4, 4);
+  }
+
+  drawEnemySprite(type, sprite, half) {
+    if (type === 'ghost') {
+      this.drawGhostSprite();
+      return;
+    }
+
+    const body = sprite.color || COLORS.ENEMY;
+    const accent = sprite.accentColor || COLORS.ENEMY_ACCENT;
+    this.ctx.fillStyle = body;
+    if (type === 'zombie') {
+      this.ctx.fillRect(-8, -7, 16, 16);
+      this.ctx.fillRect(-6, -14, 12, 8);
+      this.ctx.fillRect(-13, -5, 5, 12);
+      this.ctx.fillRect(8, -4, 5, 11);
+      this.ctx.fillRect(-7, 8, 5, 8);
+      this.ctx.fillRect(2, 8, 5, 8);
+      this.ctx.fillStyle = '#ead95b';
+      this.ctx.fillRect(-4, -11, 2, 2);
+      this.ctx.fillRect(3, -11, 2, 2);
+    } else if (type === 'skeleton_enemy') {
+      this.ctx.fillStyle = '#d7cfb2';
+      this.ctx.beginPath();
+      this.ctx.arc(0, -8, 7, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.fillStyle = accent;
+      this.ctx.fillRect(-4, -10, 3, 3);
+      this.ctx.fillRect(2, -10, 3, 3);
+      this.ctx.fillStyle = '#d7cfb2';
+      this.ctx.fillRect(-2, 0, 4, 15);
+      for (const y of [-1, 3, 7]) this.ctx.fillRect(-7, y, 14, 2);
+      this.ctx.fillRect(-9, 0, 3, 12);
+      this.ctx.fillRect(6, 0, 3, 12);
+      this.ctx.fillRect(-6, 13, 4, 5);
+      this.ctx.fillRect(2, 13, 4, 5);
+    } else if (type === 'giant_bat') {
+      this.ctx.fillStyle = body;
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, -2);
+      this.ctx.lineTo(-half + 2, -12);
+      this.ctx.lineTo(-10, 1);
+      this.ctx.lineTo(-half + 3, 11);
+      this.ctx.lineTo(-3, 8);
+      this.ctx.lineTo(3, 8);
+      this.ctx.lineTo(half - 3, 11);
+      this.ctx.lineTo(10, 1);
+      this.ctx.lineTo(half - 2, -12);
+      this.ctx.closePath();
+      this.ctx.fill();
+      this.ctx.fillStyle = accent;
+      this.ctx.fillRect(-5, -4, 3, 3);
+      this.ctx.fillRect(2, -4, 3, 3);
+      this.ctx.fillStyle = body;
+      this.ctx.fillRect(-3, -8, 6, 16);
+    } else {
+      this.ctx.fillRect(-8, -10, 16, 20);
+      this.ctx.fillRect(-12, -5, 4, 11);
+      this.ctx.fillRect(8, -5, 4, 11);
+      this.ctx.fillRect(-6, 9, 4, 7);
+      this.ctx.fillRect(2, 9, 4, 7);
+      this.ctx.fillStyle = accent;
+      this.ctx.fillRect(-5, -6, 3, 3);
+      this.ctx.fillRect(2, -6, 3, 3);
+    }
   }
 
   // Fallback translúcido para o fantasma quando o spritesheet não existe

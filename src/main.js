@@ -9,6 +9,7 @@ import { MenuScene } from './scenes/MenuScene.js';
 import { eventBus } from './core/EventBus.js';
 import { GAME_STATE } from './utils/constants.js';
 import { SaveSystem } from './systems/SaveSystem.js';
+import { ThreeRenderer } from './renderer/ThreeRenderer.js';
 
 // ============ INICIALIZAÇÃO ============
 
@@ -16,7 +17,7 @@ import { SaveSystem } from './systems/SaveSystem.js';
 const engine = createEngine('game-canvas');
 
 // 2. Renderer
-const renderer = new CanvasRenderer();
+let renderer = new CanvasRenderer();
 renderer.init(engine.canvas);
 engine.setRenderer(renderer);
 
@@ -33,6 +34,24 @@ engine.addScene('menu', menuScene);
 const renderSystem = new RenderSystem(renderer);
 renderSystem.onAdd(engine); // IMPORTANTE: seta this.engine
 engine.renderSystem = renderSystem;
+
+function switchToThree(firstPerson = false) {
+  if (!(renderer instanceof ThreeRenderer)) {
+    renderer = new ThreeRenderer();
+    engine.switchRenderer(renderer);
+    engine.renderSystem.renderer = renderer;
+  }
+  renderer.setFirstPerson(firstPerson);
+}
+
+function switchToCanvas() {
+  if (renderer instanceof ThreeRenderer) {
+    engine.paused = false;
+    renderer = new CanvasRenderer();
+    engine.switchRenderer(renderer);
+    engine.renderSystem.renderer = renderer;
+  }
+}
 
 // 5. Eventos globais
 eventBus.on('combatStart', ({ player, enemy }) => {
@@ -59,7 +78,20 @@ eventBus.on('doorOpened', ({ x, y }) => {
 // Menu start game event
 eventBus.on('menuStartGame', data => {
   console.log(`🎮 Iniciando jogo: ${data.characterId || data.savedGame?.characterId} no andar ${data.floor || data.savedGame?.floor || 1}`);
+  if (data.dev3d) switchToThree(true);
+  else switchToCanvas();
   engine.changeScene('dungeon', data);
+});
+
+eventBus.on('leave3DToMenu', () => {
+  dungeonScene.saveGame().then(() => {
+    engine.paused = false;
+    switchToCanvas();
+    engine.changeScene('menu');
+  }).catch(error => {
+    console.error('Não foi possível salvar antes de voltar ao menu:', error);
+    renderer.showPauseError?.(`Falha ao salvar: ${error.message}`);
+  });
 });
 
 // Debug keys
@@ -70,6 +102,16 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') {
     // Regenera andar atual
     engine.eventBus.emit('changeFloor', { direction: 'down' });
+  }
+  if (e.code === 'F4') {
+    if (renderer instanceof ThreeRenderer) return;
+    const progress = saveSystem.loadProgress();
+    const unlockedIds = progress.threeDUnlockedCharacterIds || [];
+    if (!unlockedIds.includes(dungeonScene.characterId)) {
+      console.info('O modo 3D em primeira pessoa é liberado após escapar da masmorra.');
+      return;
+    }
+    switchToThree(true);
   }
 });
 

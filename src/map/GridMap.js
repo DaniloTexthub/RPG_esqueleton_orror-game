@@ -100,6 +100,7 @@ export class GridMap {
     this.stairsDown = [];
     this.stairsUp = [];
     this.secretRooms = [];
+    this.rooms = [];
   }
 
   // Index 1D
@@ -135,6 +136,7 @@ export class GridMap {
     const key = `${x},${y}`;
     const feature = this.features.get(key);
     if (feature && feature.type === 'door' && feature.state === 'closed') return false;
+    if (feature && feature.type === 'crate' && feature.state !== 'destroyed') return false;
 
     return true;
   }
@@ -168,6 +170,9 @@ export class GridMap {
       }
       if (feature.type === 'stairs_up') {
         return { ...feature, action: 'ascend' };
+      }
+      if (feature.type === 'crate') {
+        return { ...feature, action: 'destroy_crate' };
       }
       return feature;
     }
@@ -211,7 +216,8 @@ export class GridMap {
       stairsDown: this.stairsDown,
       stairsUp: this.stairsUp,
       seed: this.seed,
-      secretRooms: this.secretRooms
+      secretRooms: this.secretRooms,
+      rooms: this.rooms
     };
   }
 
@@ -225,6 +231,7 @@ export class GridMap {
     map.stairsUp = json.stairsUp || [];
     map.seed = json.seed ?? null;
     map.secretRooms = json.secretRooms || [];
+    map.rooms = json.rooms || [];
     return map;
   }
 
@@ -262,6 +269,7 @@ export class GridMap {
           centerY: y + Math.floor(roomHeight / 2)
         };
         rooms.push(room);
+        map.rooms.push({ ...room });
 
         for (let tileY = y; tileY < y + roomHeight; tileY++) {
           for (let tileX = x; tileX < x + roomWidth; tileX++) {
@@ -352,7 +360,9 @@ export class GridMap {
     })[0];
     const end = { x: endRoom.centerX, y: endRoom.centerY };
     map.setPlayerSpawn(start.x, start.y);
+    map.set(start.x, start.y, TILE_TYPE.STAIRS_UP);
     map.addFeature(start.x, start.y, { type: 'stairs_up', interactable: true });
+    map.set(end.x, end.y, TILE_TYPE.STAIRS_DOWN);
     map.addFeature(end.x, end.y, { type: 'stairs_down', interactable: true });
     const spawnDistance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -403,7 +413,9 @@ export class GridMap {
     }
 
     // Spawns ficam dentro das salas, afastados das escadas e uns dos outros.
-    const candidates = shuffled(rooms.flatMap(room => {
+    const candidates = shuffled(rooms
+      .filter(room => room !== startRoom && room !== endRoom)
+      .flatMap(room => {
       const positions = [];
       for (let y = room.y + 1; y < room.y + room.height - 1; y++) {
         for (let x = room.x + 1; x < room.x + room.width - 1; x++) {
@@ -418,9 +430,34 @@ export class GridMap {
 
     for (const candidate of candidates) {
       if (map.enemySpawns.length >= 8) break;
-      if (spawnDistance(candidate, start) < 4 || spawnDistance(candidate, end) < 3) continue;
+      if (spawnDistance(candidate, start) < 8 || spawnDistance(candidate, end) < 3) continue;
       if (map.enemySpawns.some(spawn => spawnDistance(candidate, spawn) < 4)) continue;
       map.enemySpawns.push(candidate);
+    }
+
+    // Caixas quebráveis ficam longe da entrada e podem conter itens
+    const cratePositions = shuffled(rooms.flatMap(room => {
+      const positions = [];
+      for (let y = room.y + 1; y < room.y + room.height - 1; y++) {
+        for (let x = room.x + 1; x < room.x + room.width - 1; x++) {
+          const position = { x, y };
+          if (map.get(x, y) === TILE_TYPE.FLOOR &&
+              !map.features.has(`${x},${y}`) &&
+              spawnDistance(position, start) >= 6 &&
+              spawnDistance(position, end) >= 3) {
+            positions.push(position);
+          }
+        }
+      }
+      return positions;
+    }), random);
+    for (let i = 0; i < 5 && cratePositions.length; i++) {
+      const position = cratePositions.shift();
+      map.addFeature(position.x, position.y, {
+        type: 'crate',
+        state: 'intact',
+        interactable: true
+      });
     }
 
     return map;

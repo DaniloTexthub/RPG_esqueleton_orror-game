@@ -21,6 +21,7 @@ export class Engine {
     this.scenes = new Map();
     this.gameState = GAME_STATE.PLAYING;
     this.running = false;
+    this.paused = false;
     this.lastTime = 0;
     this.accumulator = 0;
     this.fixedTimestep = 1000 / 60; // 60 FPS fixed
@@ -50,6 +51,26 @@ export class Engine {
     this.renderer = renderer;
     this.renderer.engine = this;
     this.renderer.resize(this.canvas.width, this.canvas.height);
+  }
+
+  // Troca a implementação visual sem alterar lógica/ECS
+  switchRenderer(renderer) {
+    const oldRenderer = this.renderer;
+    const oldCanvas = this.canvas;
+    const newCanvas = document.createElement('canvas');
+    newCanvas.id = oldCanvas.id;
+    newCanvas.width = oldCanvas.width;
+    newCanvas.height = oldCanvas.height;
+    newCanvas.className = oldCanvas.className;
+    newCanvas.setAttribute('aria-label', oldCanvas.getAttribute('aria-label') || 'Área do jogo');
+    oldCanvas.replaceWith(newCanvas);
+    renderer.init(newCanvas);
+    this.canvas = document.getElementById(oldCanvas.id);
+    renderer.engine = this;
+    renderer.resize(oldCanvas.width, oldCanvas.height);
+    this.ctx = this.canvas.getContext('2d');
+    oldRenderer?.dispose?.();
+    this.setRenderer(renderer);
   }
 
   // Registra cena
@@ -124,7 +145,7 @@ export class Engine {
 
   // Update de lógica fixa (dt em ms)
   fixedUpdate(dt) {
-    if (this.currentScene) {
+    if (!this.paused && this.currentScene) {
       this.currentScene.update(dt);
     }
 
@@ -159,11 +180,11 @@ export class Engine {
     }
 
     // Desenha overlay de fade por cima de tudo
-    if (context && typeof context.drawFade === 'function') {
+    if (this.ctx && context && typeof context.drawFade === 'function') {
       context.drawFade(this.ctx, this.canvas.width, this.canvas.height);
     }
     // Desenha overlay de flash por cima de tudo (último)
-    if (context && typeof context.drawFlash === 'function') {
+    if (this.ctx && context && typeof context.drawFlash === 'function') {
       context.drawFlash(this.ctx, this.canvas.width, this.canvas.height);
     }
 
@@ -174,6 +195,7 @@ export class Engine {
   }
 
   renderDebug() {
+    if (!this.ctx) return;
     this.ctx.save();
     this.ctx.font = '10px monospace';
     this.ctx.fillStyle = '#666';

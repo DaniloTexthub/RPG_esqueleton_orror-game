@@ -154,7 +154,8 @@ export class SaveSystem {
       highestFloor: 1,
       totalEnemiesKilled: 0,
       speedRuns: 0,
-      totalHealingDone: 0
+      totalHealingDone: 0,
+      threeDUnlockedCharacterIds: []
     };
     try {
       return { ...defaults, ...JSON.parse(localStorage.getItem('skeleton_dungeon_save') || '{}') };

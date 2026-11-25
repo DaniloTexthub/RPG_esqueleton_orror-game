@@ -1,6 +1,6 @@
 # PLANO.md — Roadmap & Tarefas do RPG Skeleton Dungeon
 
-> **Atualizado:** 2026-11-23 | **Status atual:** Fases 1–4 ✅ (MySQL opcional não implementado)
+> **Atualizado:** 2026-11-24 | **Status atual:** Fases 1–4 ✅; preparação da Fase 5 iniciada (MySQL opcional não implementado)
 
 ---
 
@@ -109,11 +109,33 @@
 
 | ID | Tarefa | Prioridade | Estimativa | Dependências |
 |----|--------|------------|------------|------------|
-| T01 | `Three.jsRenderer` implementando mesma interface do `CanvasRenderer` | 🟢 Baixa | 4h | F06 |
-| T02 | Camera 3D (isométrica ou top-down com tilt) | 🟢 Baixa | 2h | T01 |
-| T03 | Modelos low-poly (esqueleto, inimigos, tiles) | 🟢 Baixa | 6h | T01 |
-| T04 | Shaders: outline, glow, fog of war | 🟢 Baixa | 3h | T01 |
-| T05 | Performance: instancing, frustum culling, LOD | 🟢 Baixa | 2h | T01 |
+| T01 | `Three.jsRenderer` implementando mesma interface do `CanvasRenderer` | 🟡 Em andamento | 4h | F06 |
+| T02 | Camera 3D (isométrica ou top-down com tilt) | 🟡 Em andamento | 2h | T01 |
+| T03 | Modelos low-poly (esqueleto, inimigos, tiles) | 🟡 Em andamento | 6h | T01 |
+| T04 | Shaders: outline, glow, fog of war | ⚪ Planejado | 3h | T01 |
+| T05 | Performance: instancing, frustum culling, LOD | ⚪ Planejado | 2h | T01 |
+
+### Preparação iniciada
+- Layout completo de cada andar persistido em cache e em saves.
+- Retorno por escadas reutiliza o mesmo layout, portas e estado de entidades.
+- Escadas possuem sinais visuais separados: verde/`SUBIR` e dourado/`DESCER`.
+- Contrato `Renderer` preparado para futuras implementações 2D/3D.
+
+### Fuga pelos 102 andares
+- Novo jogo começa em um andar aleatório entre 55 e 102.
+- O objetivo é subir até o andar 1 e escapar.
+- A exploração não passa do andar 102.
+- Inimigos perseguem dentro de um raio e não são posicionados na primeira sala.
+- Caixas quebráveis com `E` podem fornecer poções, chaves, armas ou armaduras.
+- Escapar libera o modo 3D em primeira pessoa (`F4`) para a classe utilizada.
+- Escada de entrada de cada andar corresponde ao sentido inverso da escada usada na transição.
+- Botão `dev test-3D` permite testar o modo 3D sem completar a fuga.
+- No modo 3D, clique ataca inimigos e `G`/`Tab` abre o inventário; colisões não iniciam combate por turnos.
+- Mouselook com captura do ponteiro, movimento livre WASD/Setas e corrida com Shift.
+- Movimento lateral segue a orientação da câmera; inimigos também perseguem em movimento contínuo no 3D.
+- `Esc` pausa a simulação, libera o ponteiro e abre opções de continuar, controles ou menu.
+- Clique do mouse mira em inimigos e caixas; caixas quebradas entregam loot.
+- Tocha 3D com luz quente de alcance e oscilação; versão 2D usa halo simplificado. Silhuetas de inimigos e objetos são distintas.
 
 ---
 

@@ -87,6 +87,12 @@ export class MenuScene extends Scene {
 
         /* Character Select */
         .char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; width: 100%; max-width: 900px; }
+        .dev-test3d-btn {
+          position: fixed; right: 14px; bottom: 14px; padding: 9px 12px;
+          color: #777; background: #101010; border: 1px solid #252525;
+          border-radius: 3px; font-size: 8px; opacity: .7; cursor: pointer;
+        }
+        .dev-test3d-btn:hover { color: #bbb; border-color: #555; opacity: 1; }
         .char-card {
           background: linear-gradient(135deg, #151515, #0a0a0a);
           border: 3px solid #333; border-radius: 12px; padding: 16px;
@@ -155,6 +161,7 @@ export class MenuScene extends Scene {
         <div class="title" style="font-size: 20px;">ESCOLHA SUA CLASSE</div>
         <div class="subtitle">Use ← → ↑ ↓ para navegar | Enter para selecionar | ESC para voltar</div>
         <div class="char-grid" id="char-grid"></div>
+        <button class="dev-test3d-btn" data-action="devTest3d">dev test-3D</button>
         <button class="back-btn" data-action="back">← VOLTAR</button>
       </div>
 
@@ -329,6 +336,17 @@ export class MenuScene extends Scene {
       case 'selectChar':
         // Handled by click on select button
         break;
+      case 'devTest3d': {
+        const selected = this.charGrid.querySelector('.char-card.selected:not(.locked)');
+        const characterId = selected?.dataset.charId || 'skeleton_warrior';
+        const startingFloor = 55 + Math.floor(Math.random() * 48);
+        this.startGame(characterId, startingFloor, {
+          slotId: this.selectedSaveSlot,
+          isNewGame: true,
+          dev3d: true
+        });
+        break;
+      }
       case 'back':
         this.goBack();
         break;
@@ -444,7 +462,8 @@ export class MenuScene extends Scene {
 
   selectCharacter(charId) {
     this.selectedCharacterId = charId;
-    this.startGame(charId, 1, {
+    const startingFloor = 55 + Math.floor(Math.random() * 48);
+    this.startGame(charId, startingFloor, {
       slotId: this.selectedSaveSlot,
       isNewGame: true
     });
@@ -464,7 +483,8 @@ export class MenuScene extends Scene {
       characterId,
       floor,
       slotId: options.slotId || this.selectedSaveSlot,
-      isNewGame: options.isNewGame !== false
+      isNewGame: options.isNewGame !== false,
+      dev3d: options.dev3d === true
     });
   }
 

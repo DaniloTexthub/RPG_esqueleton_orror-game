@@ -124,7 +124,18 @@ npm run dev       # Abre http://localhost:5173
 | **F1** | Toggle debug (FPS, entity count) |
 | **F2** | Toggle grid visual |
 | **F3** | Toggle colliders |
+| **F4** | Alterna para o renderer 3D WebGL |
+| **W / S ou ↑ / ↓** | Avança e recua no modo 3D |
+| **A / D ou ← / →** | Desloca para esquerda/direita em relação à câmera no modo 3D |
+| **Mouse** | Olha ao redor no modo 3D (clique na tela para capturar) |
+| **Clique do mouse** | Ataca inimigos ou quebra caixas no modo 3D |
+| **G / Tab** | Abre ou fecha o inventário no modo 3D |
+| **ESC** | Pausa o modo 3D e libera o mouse para escolher opções |
+| **Shift** | Corre no modo 3D |
+| **E** | Interage com a escada ou caixa próxima |
 | **R** | Regenera andar atual |
+
+No modo 3D, jogador e inimigos se movem continuamente, sem passos por tile. A tocha acompanha a câmera com luz quente e oscilação suave; no 2D há um halo simplificado. Monstros, escadas, portas, itens e caixas usam silhuetas e cores distintas.
 
 ---
 

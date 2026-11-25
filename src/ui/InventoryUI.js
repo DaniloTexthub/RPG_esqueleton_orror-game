@@ -66,14 +66,19 @@ export class InventoryUI {
   }
 
   onKeyDown(event) {
-    if (event.code === 'KeyI' && !event.repeat) {
+    const firstPerson = this.engine?.renderer?.firstPerson === true;
+    const inventoryKey = event.code === 'KeyI' ||
+      (firstPerson && (event.code === 'KeyG' || event.code === 'Tab'));
+    if (inventoryKey && !event.repeat) {
       event.preventDefault();
+      event.stopPropagation();
       this.toggle();
       return;
     }
     if (!this.visible) return;
     if (event.code === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       this.hide();
       return;
     }

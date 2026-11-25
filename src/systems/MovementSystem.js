@@ -18,6 +18,8 @@ export class MovementSystem extends System {
     this.requiredComponents = ['Position', 'Velocity'];
     this.pendingMoves = new Map(); // entityId -> { targetX, targetY, resolve }
     this.inventorySystem = new InventorySystem();
+    this.enemyMoveAccumulator = 0;
+    this.enemyAttackCooldowns = new Map();
   }
 
   onAdd(game) {
@@ -111,8 +113,17 @@ export class MovementSystem extends System {
         const isPlayer = movingEntity.hasTag('player');
         const isEnemy = entity.hasTag('enemy');
         if (isPlayer && isEnemy) {
+          if (this.engine.renderer?.firstPerson) return false;
           eventBus.emit('combatStart', { player: movingEntity, enemy: entity });
           return false; // Bloqueia movimento, combate assume
+        }
+        if (movingEntity.hasTag('enemy') && isPlayer) {
+          if (this.engine.renderer?.firstPerson) {
+            eventBus.emit('actionEnemyAttack', { enemy: movingEntity });
+            return false;
+          }
+          eventBus.emit('combatStart', { player: entity, enemy: movingEntity });
+          return false;
         }
 
         // Trigger genérico (portas, itens, etc)
@@ -137,6 +148,21 @@ export class MovementSystem extends System {
       return;
     }
 
+    if (this.engine.renderer?.firstPerson) {
+      const player = entities.find(entity => entity.hasTag('player'));
+      for (const entity of entities) {
+        entity.get(Velocity)?.stop();
+      }
+      if (player) this.updateFreeMovement(dt, entities, player, inputSystem);
+      inputSystem.lastDirection = null;
+      if (inputSystem.getInteractPressed?.() && player) {
+        this.handleInteractionAt(player);
+        inputSystem.consumeInteract?.();
+      }
+      this.updateFreeEnemyAI(dt, entities, player);
+      return;
+    }
+
     // 1. Verifica input para iniciar movimento (apenas player)
     if (inputSystem.lastDirection) {
       const dir = inputSystem.lastDirection;
@@ -154,7 +180,14 @@ export class MovementSystem extends System {
       inputSystem.consumeInteract?.();
     }
 
-    // 2. Processa movimento suave (lerp) APENAS para entities que estão movendo
+    this.updateMovingEntities(dt, entities);
+
+    // Inimigos patrulham e perseguem o jogador em um raio curto
+    const player = entities.find(entity => entity.hasTag('player'));
+    this.updateEnemyAI(dt, entities, player);
+  }
+
+  updateMovingEntities(dt, entities) {
     for (const entity of entities) {
       const vel = entity.get(Velocity);
       if (!vel || !vel.moving) continue; // Pula inimigos parados
@@ -168,13 +201,161 @@ export class MovementSystem extends System {
     }
   }
 
+  updateEnemyAI(dt, entities, player) {
+    if (!player) return;
+    this.enemyMoveAccumulator += dt;
+    if (this.enemyMoveAccumulator >= 720) {
+      this.enemyMoveAccumulator = 0;
+      this.moveEnemies(entities, player);
+    }
+  }
+
+  updateFreeMovement(dt, entities, player, inputSystem) {
+    const renderer = this.engine.renderer;
+    const position = player.get(Position);
+    if (!position) return;
+    const keys = this.engine.input.keys;
+    const forward = Number(keys.has('KeyW') || keys.has('ArrowUp')) -
+      Number(keys.has('KeyS') || keys.has('ArrowDown'));
+    const strafe = Number(keys.has('KeyD') || keys.has('ArrowRight')) -
+      Number(keys.has('KeyA') || keys.has('ArrowLeft'));
+    const length = Math.hypot(forward, strafe);
+    const yaw = renderer.yaw;
+    const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6.5 : 4;
+    const step = length ? speed * dt / 1000 / length : 0;
+    const dx = (Math.sin(yaw) * forward - Math.cos(yaw) * strafe) * step;
+    const dy = (Math.cos(yaw) * forward + Math.sin(yaw) * strafe) * step;
+    const nextX = position.x + dx;
+    const nextY = position.y + dy;
+    const canOccupy = (x, y) => {
+      const radius = 0.2;
+      for (const [offsetX, offsetY] of [
+        [-radius, -radius], [radius, -radius], [-radius, radius], [radius, radius]
+      ]) {
+        if (!this.gridMap.isWalkable(
+          Math.floor(x + offsetX + 0.5),
+          Math.floor(y + offsetY + 0.5)
+        )) return false;
+      }
+      return !entities.some(entity => {
+        if (!entity.active || !entity.hasTag('enemy')) return false;
+        const other = entity.get(Position);
+        return other && Math.hypot(x - other.x, y - other.y) < 0.58;
+      });
+    };
+
+    let resolvedX = position.x;
+    let resolvedY = position.y;
+    if (canOccupy(nextX, position.y)) resolvedX = nextX;
+    if (canOccupy(resolvedX, nextY)) resolvedY = nextY;
+    if (resolvedX !== position.x || resolvedY !== position.y) {
+      const oldCellX = Math.floor(position.x + 0.5);
+      const oldCellY = Math.floor(position.y + 0.5);
+      position.set(resolvedX, resolvedY);
+      if (oldCellX !== Math.floor(resolvedX + 0.5) ||
+          oldCellY !== Math.floor(resolvedY + 0.5)) {
+        this.onTileEntered(player);
+      }
+    }
+
+    const facingX = Math.sin(yaw);
+    const facingY = Math.cos(yaw);
+    inputSystem.facing = Math.abs(facingX) > Math.abs(facingY)
+      ? { x: Math.sign(facingX), y: 0, name: facingX > 0 ? 'RIGHT' : 'LEFT' }
+      : { x: 0, y: Math.sign(facingY), name: facingY > 0 ? 'DOWN' : 'UP' };
+  }
+
+  moveEnemies(entities, player) {
+    const playerPos = player.get(Position);
+    if (!playerPos) return;
+    for (const enemy of entities) {
+      if (!enemy.active || !enemy.hasTag('enemy')) continue;
+      const enemyPos = enemy.get(Position);
+      const velocity = enemy.get(Velocity);
+      if (!enemyPos || !velocity || velocity.moving) continue;
+      const distance = Math.abs(enemyPos.x - playerPos.x) + Math.abs(enemyPos.y - playerPos.y);
+      if (distance > 8) continue;
+
+      const horizontal = Math.sign(playerPos.x - enemyPos.x);
+      const vertical = Math.sign(playerPos.y - enemyPos.y);
+      const first = Math.random() < 0.55
+        ? { x: horizontal, y: 0 }
+        : { x: 0, y: vertical };
+      const second = first.x !== 0 ? { x: 0, y: vertical } : { x: horizontal, y: 0 };
+      if (this.tryMove(enemy, first.x, first.y)) continue;
+      this.tryMove(enemy, second.x, second.y);
+    }
+  }
+
+  updateFreeEnemyAI(dt, entities, player) {
+    const playerPos = player?.get(Position);
+    if (!playerPos || !this.gridMap) return;
+
+    for (const enemy of entities) {
+    if (!enemy.active || !enemy.hasTag('enemy')) continue;
+    const enemyPos = enemy.get(Position);
+    if (!enemyPos) continue;
+
+    const dx = playerPos.x - enemyPos.x;
+    const dy = playerPos.y - enemyPos.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 10) continue;
+
+    const cooldown = Math.max(0, (this.enemyAttackCooldowns.get(enemy.id) || 0) - dt);
+    this.enemyAttackCooldowns.set(enemy.id, cooldown);
+    if (distance <= 0.86) {
+      if (cooldown === 0) {
+        eventBus.emit('actionEnemyAttack', { enemy });
+        this.enemyAttackCooldowns.set(enemy.id, 1250);
+      }
+      continue;
+    }
+
+    const enemyData = enemy.get(Collider)?.enemyData;
+    const speed = 1.15 + (enemyData?.speed || 4) * 0.075;
+    const step = Math.min(distance - 0.68, speed * dt / 1000);
+    const moveX = dx / distance * step;
+    const moveY = dy / distance * step;
+    const canOccupy = (x, y) => {
+      const radius = 0.22;
+      for (const [offsetX, offsetY] of [
+        [-radius, -radius], [radius, -radius], [-radius, radius], [radius, radius]
+      ]) {
+        if (!this.gridMap.isWalkable(
+          Math.floor(x + offsetX + 0.5),
+          Math.floor(y + offsetY + 0.5)
+        )) return false;
+      }
+      return !entities.some(other => {
+        if (!other.active || other === enemy ||
+            (!other.hasTag('enemy') && !other.hasTag('player'))) return false;
+        const otherPos = other.get(Position);
+        return otherPos && Math.hypot(x - otherPos.x, y - otherPos.y) < 0.58;
+      });
+    };
+
+    let nextX = enemyPos.x + moveX;
+    let nextY = enemyPos.y;
+    if (!canOccupy(nextX, nextY)) nextX = enemyPos.x;
+    nextY = enemyPos.y + moveY;
+    if (!canOccupy(nextX, nextY)) nextY = enemyPos.y;
+    if (nextX !== enemyPos.x || nextY !== enemyPos.y) {
+      enemyPos.set(nextX, nextY);
+    }
+    }
+  }
+
   // Chamado quando entity chega no tile alvo
   onTileEntered(entity) {
     const pos = entity.get(Position);
     if (!pos) return;
 
     // Evento para outros systems (combate, etc)
-    eventBus.emit('entityMoved', { entity, x: pos.x, y: pos.y });
+    eventBus.emit('entityMoved', {
+      entity,
+      x: Math.floor(pos.x + 0.5),
+      y: Math.floor(pos.y + 0.5)
+    });
   }
 
   handleInteraction(entity, interactable, x, y) {
@@ -220,6 +401,10 @@ export class MovementSystem extends System {
       case 'ascend':
         eventBus.emit('changeFloor', { direction: 'up' });
         break;
+      case 'destroy_crate': {
+        eventBus.emit('actionCrate', { x, y });
+        break;
+      }
     }
   }
 
@@ -227,22 +412,24 @@ export class MovementSystem extends System {
   handleInteractionAt(entity) {
     const pos = entity.get(Position);
     if (!pos) return;
+    const tileX = Math.floor(pos.x + 0.5);
+    const tileY = Math.floor(pos.y + 0.5);
 
     // 1. Tenta interagir com tile atual (escadas)
-    let interactable = this.gridMap.getInteractable(pos.x, pos.y);
+    let interactable = this.gridMap.getInteractable(tileX, tileY);
     if (interactable) {
-      this.handleInteraction(entity, interactable, pos.x, pos.y);
+      this.handleInteraction(entity, interactable, tileX, tileY);
       return;
     }
 
     // 2. Olha na direção persistente do player
     const inputSystem = this.engine.getSystem?.('InputSystem');
     const facing = inputSystem?.facing || { x: 0, y: 1 };
-    const adjX = pos.x + facing.x;
-    const adjY = pos.y + facing.y;
+    const adjX = tileX + facing.x;
+    const adjY = tileY + facing.y;
 
     interactable = this.gridMap.getInteractable(adjX, adjY);
-    if (interactable && ['open', 'close', 'reveal', 'pickup', 'event'].includes(interactable.action)) {
+    if (interactable && ['open', 'close', 'reveal', 'pickup', 'event', 'destroy_crate'].includes(interactable.action)) {
       this.handleInteraction(entity, interactable, adjX, adjY);
       return;
     }
